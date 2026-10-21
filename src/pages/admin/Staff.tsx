@@ -7,10 +7,11 @@ import { StaffActivityList } from '../../components/domain/StaffActivityList'
 import { AccessBadge, RoleBadge } from '../../components/domain/StatusBadge'
 import { Callout } from '../../components/ui/Callout'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { LoadMore, PageStatus } from '../../components/ui/PageStatus'
 import { PageHeader, Section } from '../../components/ui/Section'
 import { TabNav } from '../../components/ui/TabNav'
-import { useAppState } from '../../data/hooks'
-import { accessOf, staffActivityFor, type Access } from '../../data/selectors'
+import { pagedRows, pagedTotal, useAccounts, useStaffActivity } from '../../data/queries'
+import { accessOf, type Access } from '../../data/selectors'
 import type { StaffAccount } from '../../data/types'
 import { buttonClasses } from '../../lib/styles'
 import { formatDate } from '../../lib/time'
@@ -23,31 +24,30 @@ const FILTERS: Array<{ id: '' | Access; label: string }> = [
   { id: 'deactivated', label: 'Deactivated' },
 ]
 
-/** How many history entries show before "Show more". */
-const HISTORY_ROWS = 15
-
 /** Who can be managed from the app: approved managers/editors and waiting accounts, never yourself or an admin. */
 const manageable = (a: StaffAccount, meId: string) => a.id !== meId && a.role !== 'admin'
 
 /** Admin home for accounts: who can sign in, their role and access, and the audited changes. */
 export function Staff() {
-  const state = useAppState()
+  const accountsQuery = useAccounts()
+  const historyQuery = useStaffActivity()
   const { me } = useSession()
   const [params, setParams] = useSearchParams()
   const filter = (params.get('access') ?? '') as '' | Access
   const managingId = params.get('manage')
-  const [historyRows, setHistoryRows] = useState(HISTORY_ROWS)
   // A new key per opening, so the Add user form always starts empty.
   const [adding, setAdding] = useState<number | null>(null)
 
   // Waiting accounts first, then by name.
-  const accounts = [...state.accounts].sort(
+  const allAccounts = accountsQuery.data ?? []
+  const accounts = [...allAccounts].sort(
     (a, b) => Number(accessOf(b) === 'pending') - Number(accessOf(a) === 'pending') || a.name.localeCompare(b.name),
   )
   const shown = accounts.filter((a) => !filter || accessOf(a) === filter)
   const count = (id: '' | Access) => (id ? accounts.filter((a) => accessOf(a) === id).length : accounts.length)
-  const managing = managingId ? (state.accounts.find((a) => a.id === managingId) ?? null) : null
-  const history = staffActivityFor(state)
+  const managing = managingId ? (allAccounts.find((a) => a.id === managingId) ?? null) : null
+  const history = pagedRows(historyQuery.data)
+  const historyTotal = pagedTotal(historyQuery.data)
 
   // The dialog's account is in the URL, so "Manage access" links can open it directly.
   const setManaging = (id: string | null) => {
@@ -90,7 +90,9 @@ export function Staff() {
           className="xl:col-span-3"
           flush
         >
-          {shown.length ? (
+          {accountsQuery.isPending || accountsQuery.error ? (
+            <PageStatus error={accountsQuery.error?.message} retry={() => void accountsQuery.refetch()} />
+          ) : shown.length ? (
             <ul className="divide-y divide-border">
               {shown.map((a) => (
                 <li key={a.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -145,25 +147,27 @@ export function Staff() {
         </Section>
 
         <Section title="Account history" description="Every role and access change, newest first" className="xl:col-span-2" flush>
-          <StaffActivityList state={state} entries={history.slice(0, historyRows)} showAccount label="Account history" />
-          {history.length > historyRows && (
-            <button
-              type="button"
-              className="block w-full border-t border-border px-4 py-3 text-left text-sm font-semibold text-primary hover:bg-surface-2"
-              onClick={() => setHistoryRows((n) => n + HISTORY_ROWS)}
-            >
-              Show more ({history.length - historyRows} older)
-            </button>
+          {historyQuery.isPending || historyQuery.error ? (
+            <PageStatus error={historyQuery.error?.message} retry={() => void historyQuery.refetch()} />
+          ) : (
+            <StaffActivityList accounts={allAccounts} entries={history} showAccount label="Account history" />
           )}
+          <LoadMore
+            shown={history.length}
+            total={historyTotal}
+            loading={historyQuery.isFetchingNextPage}
+            onMore={() => void historyQuery.fetchNextPage()}
+            noun="changes"
+          />
         </Section>
       </div>
 
       {adding !== null && (
-        <AddUserDialog key={adding} open state={state} me={me} onClose={() => setAdding(null)} />
+        <AddUserDialog key={adding} open accounts={allAccounts} me={me} onClose={() => setAdding(null)} />
       )}
       <StaffAccessDialog
         key={managing?.id ?? 'none'}
-        state={state}
+        accounts={allAccounts}
         account={managing && manageable(managing, me.id) ? managing : null}
         me={me}
         onClose={() => setManaging(null)}

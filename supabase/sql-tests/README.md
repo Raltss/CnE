@@ -37,3 +37,13 @@ psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -f supabase/sql-t
 ```
 
 Don't use the stub here; the real stack already has `auth`.
+
+## Volume data for speed tests
+
+`volume-fixture.sql` fills an **empty scratch database** (stub + every migration, as above) with about a year of made-up work: 1 admin, 2 managers, 18 editors, 40 products, 3,000 packages (90 active), and their rounds, activity, notifications, and attendance. It refuses to run if any package or sign-in account exists, so it can't touch a real project. `-v packages=600` loads a smaller set.
+
+```bash
+psql "<scratch database url>" -v packages=600 -f supabase/sql-tests/volume-fixture.sql
+```
+
+The accounts (`admin@perf.test`, `manager1@perf.test`, `editor01@perf.test`, …) exist only in the stub's `auth.users`, with no passwords; signing in as them in a browser needs a stand-in for Supabase Auth.

@@ -1,6 +1,5 @@
 import { CircleCheck, CircleOff, History, Pencil, RefreshCw, UserPlus, UserRoundCog, type LucideIcon } from 'lucide-react'
-import { makeLookup } from '../../data/selectors'
-import type { AppState, StaffActivity, StaffChangeType } from '../../data/types'
+import type { StaffAccount, StaffActivity, StaffChangeType } from '../../data/types'
 import { formatDateTime } from '../../lib/time'
 import { EmptyState } from '../ui/EmptyState'
 
@@ -17,7 +16,8 @@ const ICONS: Record<StaffChangeType, LucideIcon> = {
 const TRUSTED_SETUP = 'Trusted setup (SQL editor)'
 
 interface StaffActivityListProps {
-  state: AppState
+  /** Every account (names for both the account and the admin who changed it). */
+  accounts: StaffAccount[]
   entries: StaffActivity[]
   /** Name the account in each entry (the all-accounts history). */
   showAccount?: boolean
@@ -25,9 +25,8 @@ interface StaffActivityListProps {
 }
 
 /** Account history: what changed, who changed it, and when. */
-export function StaffActivityList({ state, entries, showAccount, label }: StaffActivityListProps) {
-  const accounts = new Map(state.accounts.map((a) => [a.id, a.name]))
-  const lookup = makeLookup(state)
+export function StaffActivityList({ accounts, entries, showAccount, label }: StaffActivityListProps) {
+  const names = new Map(accounts.map((a) => [a.id, a.name]))
   if (!entries.length) return <EmptyState icon={History} title="No account changes yet" compact />
   return (
     <ol className="divide-y divide-border" aria-label={label}>
@@ -40,11 +39,11 @@ export function StaffActivityList({ state, entries, showAccount, label }: StaffA
             </span>
             <div className="min-w-0 text-sm">
               <p>
-                {showAccount && <span className="font-semibold">{accounts.get(e.profileId) ?? 'Unknown account'} · </span>}
+                {showAccount && <span className="font-semibold">{names.get(e.profileId) ?? 'Unknown account'} · </span>}
                 {e.message}
               </p>
               <p className="text-xs text-muted-fg tabular-nums">
-                By {e.actorId ? lookup.personName(e.actorId) : TRUSTED_SETUP} · {formatDateTime(e.at)}
+                By {e.actorId ? (names.get(e.actorId) ?? 'Unknown') : TRUSTED_SETUP} · {formatDateTime(e.at)}
               </p>
             </div>
           </li>

@@ -1,16 +1,14 @@
 import { RotateCcw } from 'lucide-react'
 import { Link } from 'react-router'
-import { makeLookup } from '../../data/selectors'
-import type { AppState, WorkPackage } from '../../data/types'
-import { latestSubmission } from '../../data/workflow'
+import type { Lookup } from '../../data/selectors'
+import type { PackageSummary } from '../../data/types'
 import { buttonClasses } from '../../lib/styles'
 import { DeadlineBadge } from './DeadlineBadge'
 import { StatusBadge } from './StatusBadge'
 
 /** Highlighted card for packages that need feedback changes. */
-export function FeedbackCard({ state, pkg, now }: { state: AppState; pkg: WorkPackage; now: Date }) {
-  const lookup = makeLookup(state)
-  const sub = latestSubmission(state, pkg.id)
+export function FeedbackCard({ lookup, pkg, now }: { lookup: Lookup; pkg: PackageSummary; now: Date }) {
+  const sub = pkg.latest
   return (
     <article className="flex flex-col gap-3 rounded-lg border border-st-feedback/40 border-l-4 border-l-st-feedback bg-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">

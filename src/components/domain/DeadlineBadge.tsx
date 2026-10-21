@@ -1,11 +1,11 @@
 import { CalendarClock, TriangleAlert } from 'lucide-react'
 import { isActive } from '../../data/selectors'
-import type { WorkPackage } from '../../data/types'
+import type { PackageSummary } from '../../data/types'
 import { cx } from '../../lib/styles'
 import { DAY_MS, formatDateTime, formatDistance } from '../../lib/time'
 
 /** Deadline with a countdown for active work; flags overdue in text, not just color. */
-export function DeadlineBadge({ pkg, now, showDate = true }: { pkg: WorkPackage; now: Date; showDate?: boolean }) {
+export function DeadlineBadge({ pkg, now, showDate = true }: { pkg: PackageSummary; now: Date; showDate?: boolean }) {
   const left = new Date(pkg.deadline).getTime() - now.getTime()
   const active = isActive(pkg)
   const overdue = active && left < 0

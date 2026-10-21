@@ -328,15 +328,16 @@ Accessibility: AA contrast, visible focus rings, 44px touch targets, labeled ico
 
 ## Implementation status
 
-Milestone 1, the **frontend prototype**, is done (see [`prototype-notes.md`](prototype-notes.md)). Milestone 2 connects it to **Supabase**: sign-in and the first four migrations are in use on `cne-dev`; the admin-oversight migration (2026-10-21) is ready and tested locally but **not applied yet** (see [`backend-plan.md`](backend-plan.md) and [`supabase-setup.md`](supabase-setup.md)). The localStorage demo is still available with `VITE_USE_DEMO_DATA=true`.
+Milestone 1, the **frontend prototype**, is done (see [`prototype-notes.md`](prototype-notes.md)). Milestone 2 connects it to **Supabase**: sign-in and the first four migrations are in use on `cne-dev`; the other four (admin oversight, staff accounts, products without clients, query performance; 2026-10-21) are ready and tested locally but **not applied yet** (see [`backend-plan.md`](backend-plan.md) and [`supabase-setup.md`](supabase-setup.md)). The localStorage demo was removed on 2026-10-21.
 
 | Area | Status |
 |---|---|
 | Project scaffold (Vite + React + TS, ESLint) | ✅ Done |
 | Requirements and decisions | ✅ Agreed (this document) |
 | Design system | ✅ Saved to `design-system/cne/MASTER.md` |
-| UI dependencies | ✅ Tailwind CSS v4, lucide-react, react-router installed. shadcn/ui and TanStack Query not needed yet |
-| Supabase client, schema, RLS | 🟡 7 migrations, RLS on every table, workflow, staff and product functions, about 125 SQL security checks passing (plain Postgres 16 + Supabase stub), plus an end-to-end browser run against real Postgres + PostgREST. The admin-oversight migration isn't applied to `cne-dev` yet |
+| UI dependencies | ✅ Tailwind CSS v4, lucide-react, react-router, TanStack Query (reads, caching, paging) installed. shadcn/ui not needed yet |
+| Supabase client, schema, RLS | 🟡 8 migrations, RLS on every table, workflow, staff and product functions, about 125 SQL security checks passing (plain Postgres 16 + Supabase stub), plus an end-to-end browser run against real Postgres + PostgREST. Migrations 120000–150000 aren't applied to `cne-dev` yet |
+| Performance and loading | 🟡 Each page loads only what it shows (explicit columns and filters, exact totals, paged histories), changes and live updates refresh only affected lists, pages downloaded on first use, demo mode removed. Measured on a 3,000-package fixture; see `backend-plan.md` §6. Not yet measured against the hosted project |
 | Auth, accounts, roles | 🟡 Email/password sign-in, session restore, sign-out, approval gate, roles enforced in the database. Admin **Add user** (Edge Function, temporary password), forced first password change, Account page with Change password. Function not deployed yet. Password reset by email and Google OAuth not started |
 | Products / packages | 🟡 Add product (name only), create, edit, reassign, filters, on Supabase (`create_product`, `create_package`, `update_package`). No clients |
 | Package workflow (main statuses) | 🟡 Assigned → In Progress → Submitted → Apply Feedback / Completed, enforced by database functions |

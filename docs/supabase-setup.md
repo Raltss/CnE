@@ -19,8 +19,7 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
 - Use the **publishable** key. Never put the `service_role`/secret key in a `VITE_` variable, because those are shipped to the browser. Only the Add user Edge Function (step 4) uses the service role, on Supabase's servers.
-- `.env.example` shows the format. If neither value is set, the app shows "Supabase isn't configured".
-- To run the old offline demo instead, add `VITE_USE_DEMO_DATA=true` and restart `npm run dev`.
+- `.env.example` shows the format. If neither value is set, the app shows "Supabase isn't configured". (The old offline demo, `VITE_USE_DEMO_DATA`, was removed on 2026-10-21; the app always needs Supabase.)
 
 ## 2. Turn off public sign-up (Dashboard)
 
@@ -49,6 +48,7 @@ The migrations are in `supabase/migrations/`:
 | `20261021120000_admin_oversight.sql` | admin **read-only** access to all work, the account history (`staff_activity`, filled by a trigger), and the audited staff functions (`approve_account`, `change_staff_role`, `deactivate_account`, `reactivate_account`). Removes direct profile updates through the API |
 | `20261021130000_staff_accounts.sql` | accounts added in the app: the "choose your own password" flag (`must_change_password`), the job title from the new account's details, history attribution to the admin who added them, and `complete_password_change()` |
 | `20261021140000_products_without_clients.sql` | products without clients: `create_product(name)` for managers, package functions without a client, and the old client data kept but unused |
+| `20261021150000_query_performance.sql` | faster reads: turns off JIT compilation for signed-in API requests, and adds an index for listing finished packages newest first. No data changes |
 
 From the project folder:
 
@@ -58,9 +58,9 @@ npx supabase db push --dry-run     # shows what would run
 npx supabase db push               # applies it to cne-dev
 ```
 
-- The dry run lists only the files that aren't applied yet. If the first four are already applied, that's `20261021120000_admin_oversight.sql`, `20261021130000_staff_accounts.sql`, and `20261021140000_products_without_clients.sql`. If it lists anything else, or reports tables that already exist, stop and review before pushing.
-- These migrations don't change or delete existing accounts, packages, rounds, or attendance. They add policies, the `staff_activity` table, the `must_change_password` column, triggers, and functions, and start each existing account's history with an "Account history started" entry.
-- **Apply them before using the updated app.** It loads `staff_activity` and `must_change_password`, and shows "Couldn't load your account" or "Couldn't load your work" until they exist.
+- The dry run lists only the files that aren't applied yet. If the first four are already applied, that's `20261021120000_admin_oversight.sql`, `20261021130000_staff_accounts.sql`, `20261021140000_products_without_clients.sql`, and `20261021150000_query_performance.sql`. If it lists anything else, or reports tables that already exist, stop and review before pushing.
+- These migrations don't change or delete existing accounts, packages, rounds, or attendance. They add policies, the `staff_activity` table, the `must_change_password` column, triggers, functions, and one index, set `jit = off` for the `authenticated` role, and start each existing account's history with an "Account history started" entry.
+- **Apply them before using the updated app.** It loads `staff_activity` and `must_change_password`, and shows "Couldn't load your account" or "Couldn't load this" until they exist.
 
 ## 4. Deploy the Add user function
 
@@ -177,15 +177,15 @@ Use a normal window for one person and a private window (or another browser) for
 | "This email address hasn't been confirmed" | Create the user with **Auto Confirm User** ticked, or confirm them in the Users list |
 | "Waiting for access" after signing in | Approve the account in **Staff & Roles**, or run `private.approve_staff(...)`. For the very first admin, run `supabase/scripts/first-admin.sql` |
 | "Couldn't load your account" mentioning `must_change_password` | `20261021130000_staff_accounts.sql` hasn't been applied (step 3) |
-| "Couldn't load your work" mentioning `staff_activity` | `20261021120000_admin_oversight.sql` hasn't been applied (step 3) |
-| "Couldn't load your work" / `relation "public.packages" does not exist` | The migrations haven't been applied (step 3) |
+| "Couldn't load this" mentioning `staff_activity` | `20261021120000_admin_oversight.sql` hasn't been applied (step 3) |
+| "Couldn't load this" / `relation "public.packages" does not exist` | The migrations haven't been applied (step 3) |
 | Add user: "Couldn't reach the Add user function" | Deploy it (step 4) |
 | Add user: "An account with this email already exists." | Someone already signs in with that email; find them in the list (they may be waiting for approval or deactivated) |
 | "Can't change the role yet" in Staff & Roles | The person still holds open packages. A manager reassigns them first |
 | Someone forgot their password | Password reset by email isn't built yet. In the Dashboard: Authentication → Users → the user → reset or set a new password |
 | The Product list in New package is empty | Add a product (step 8) |
 | "A product called … already exists" | Product names are unique, ignoring capital letters; pick the existing one |
-| Changes from another person don't appear live | Check that `20261021100300_realtime.sql` ran; reloading the page always shows the latest data |
+| Changes from another person don't appear live | Check that `20261021100300_realtime.sql` ran; reloading the page, or switching back to the browser tab, always shows the latest data |
 
 ## Later: Google sign-in (not required now)
 

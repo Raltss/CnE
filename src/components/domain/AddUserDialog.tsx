@@ -1,7 +1,7 @@
 import { Copy, Eye, EyeOff, RefreshCw, ShieldCheck } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { api } from '../../data/store'
-import type { AppState, Person, StaffAccountInput } from '../../data/types'
+import { api } from '../../data/api'
+import type { Person, StaffAccount, StaffAccountInput } from '../../data/types'
 import { PASSWORD_MAX, PASSWORD_MIN, validateStaffAccountInput } from '../../data/validation'
 import { ROLE_META } from '../../lib/status'
 import { buttonClasses, fieldAria, inputClasses } from '../../lib/styles'
@@ -25,7 +25,8 @@ const FIELD_ORDER: FieldName[] = ['fullName', 'email', 'title', 'role', 'passwor
 
 interface AddUserDialogProps {
   open: boolean
-  state: AppState
+  /** Existing accounts, to catch a duplicate email before sending. */
+  accounts: StaffAccount[]
   me: Person
   onClose: () => void
 }
@@ -35,7 +36,7 @@ interface AddUserDialogProps {
  * the admin shares the password privately and the person chooses their own at
  * first sign-in. Re-key it per opening so the form starts empty.
  */
-export function AddUserDialog({ open, state, me, onClose }: AddUserDialogProps) {
+export function AddUserDialog({ open, accounts, me, onClose }: AddUserDialogProps) {
   const toast = useToast()
   const [form, setForm] = useState<StaffAccountInput>(EMPTY)
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({})
@@ -56,14 +57,14 @@ export function AddUserDialog({ open, state, me, onClose }: AddUserDialogProps) 
   const submit = async (event?: FormEvent) => {
     event?.preventDefault()
     setFormError(null)
-    const found = validateStaffAccountInput(state, form)
+    const found = validateStaffAccountInput(accounts, form)
     setErrors(found)
     if (Object.keys(found).length) {
       focusFirst(found)
       return
     }
     setBusy(true)
-    const result = await api.createStaffAccount(me.id, form)
+    const result = await api.createStaffAccount(form)
     setBusy(false)
     if (!result.ok) {
       const fieldErrors = (result.fieldErrors ?? {}) as Partial<Record<FieldName, string>>

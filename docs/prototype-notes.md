@@ -2,6 +2,8 @@
 
 An interactive frontend prototype that runs on **local demo data**, with no real authentication.
 
+> **Update (2026-10-21):** the offline demo described here was **removed**. The app now always uses Supabase, and the files listed below (`workflow.ts`, `seed.ts`, `demoBackend.ts`, the demo bar) no longer exist. This page is kept as a record of Milestone 1.
+>
 > **Update (Milestone 2):** the app now uses Supabase by default (see [`backend-plan.md`](backend-plan.md)). This demo is still available as an opt-in mode: add `VITE_USE_DEMO_DATA=true` to `.env.local`. The notes below describe that demo mode.
 
 ## Run it

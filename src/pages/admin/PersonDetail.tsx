@@ -1,36 +1,51 @@
-import { ArrowLeft, CalendarClock, CircleCheck, FolderSearch, Inbox, Play, Scale, TriangleAlert, UserRoundX } from 'lucide-react'
+import { ArrowLeft, CalendarClock, CircleCheck, Inbox, Play, Scale, TriangleAlert, UserRoundX } from 'lucide-react'
 import { useId } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { AttendanceTable } from '../../components/domain/AttendanceTable'
 import { KpiStat } from '../../components/domain/KpiStat'
+import { PackageSections } from '../../components/domain/PackageSections'
 import { PackageTable } from '../../components/domain/PackageTable'
 import { AccessBadge, RoleBadge } from '../../components/domain/StatusBadge'
 import { SubmissionTable } from '../../components/domain/SubmissionTable'
 import { ViewOnlyBanner } from '../../components/domain/ViewOnlyBanner'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { FilterSelect } from '../../components/ui/FilterSelect'
+import { LoadMore, PageStatus } from '../../components/ui/PageStatus'
 import { Section } from '../../components/ui/Section'
 import { TabNav } from '../../components/ui/TabNav'
-import { useAppState, useNow } from '../../data/hooks'
+import { useNow } from '../../data/hooks'
 import {
-  decisionsBy,
+  pageStatus,
+  pagedRows,
+  pagedTotal,
+  useAccounts,
+  useActiveWork,
+  useDirectory,
+  useOpenSessions,
+  usePersonAttendance,
+  useRecentCompletions,
+  useRecentDecisions,
+  useRounds,
+} from '../../data/queries'
+import {
   EMPTY_FILTERS,
-  filterPackages,
+  FINISHED_STATUSES,
+  filterActive,
   isActive,
   isOverdue,
+  reviewQueue,
   sessionDurationMs,
-  sessionsFor,
-  submissionsBy,
+  showsActive,
+  showsFinished,
   totalDurationMs,
+  type Lookup,
   type PackageFilters,
 } from '../../data/selectors'
-import type { AppState, Person, Submission } from '../../data/types'
-import { openSession } from '../../data/workflow'
+import type { PackageStatus, PackageSummary, Person, Product, SubmissionOutcome } from '../../data/types'
 import { STATUS_META, WORKFLOW_STATUSES } from '../../lib/status'
 import { buttonClasses, cardClasses, cx } from '../../lib/styles'
-import { DAY_MS, formatDuration, formatTime } from '../../lib/time'
+import { formatDuration, formatTime } from '../../lib/time'
 import { useSession } from '../../session/context'
-import { reviewQueue } from '../manager/reviewQueue'
 
 type Params = ReturnType<typeof useSearchParams>[0]
 
@@ -44,17 +59,22 @@ const ATTENDANCE_PERIODS = [
   { value: '30', label: 'Last 30 days' },
 ]
 
-const withinDays = (iso: string | null, days: number, now: Date) => Boolean(iso) && now.getTime() - new Date(iso!).getTime() <= days * DAY_MS
-
 /** Admin: one manager's or editor's work, read-only, with URL filters per tab. */
 export function PersonDetail() {
   const { id } = useParams()
-  const state = useAppState()
   const now = useNow()
   const { me } = useSession()
   const [params, setParams] = useSearchParams()
-  const person = state.people.find((p) => p.id === id && p.role !== 'admin')
+  const work = useActiveWork()
+  const accounts = useAccounts()
+  const open = useOpenSessions()
+  const completions = useRecentCompletions()
+  const decisions = useRecentDecisions()
+  const { people, products, lookup, queries } = useDirectory()
+  const status = pageStatus(work, accounts, open, completions, decisions, ...queries)
+  if (status.pending || status.error) return <PageStatus {...status} />
 
+  const person = people.find((p) => p.id === id && p.role !== 'admin')
   if (!person)
     return (
       <EmptyState
@@ -71,7 +91,7 @@ export function PersonDetail() {
       </EmptyState>
     )
 
-  const account = state.accounts.find((a) => a.id === person.id)
+  const account = accounts.data!.find((a) => a.id === person.id)
   const first = person.name.split(' ')[0]
   const isEditor = person.role === 'editor'
   const tabs = isEditor
@@ -95,13 +115,13 @@ export function PersonDetail() {
     setParams(next, { replace: true })
   }
 
-  const held = state.packages.filter((p) => (isEditor ? p.editorId : p.responsibleManagerId) === person.id)
-  const active = held.filter(isActive)
+  // Current work is loaded completely; the 30-day totals come from complete 30-day lists.
+  const active = work.data!.filter((p) => (isEditor ? p.editorId : p.responsibleManagerId) === person.id && isActive(p))
   const overdue = active.filter((p) => isOverdue(p, now))
   const awaitingReview = active.filter((p) => p.status === 'submitted')
-  const completed30 = held.filter((p) => p.status === 'completed' && withinDays(p.completedAt, 30, now))
-  const decisions30 = decisionsBy(state, person.id).filter((d) => withinDays(d.decidedAt, 30, now))
-  const open = openSession(state, person.id)
+  const completed30 = completions.data!.filter((c) => c.editorId === person.id).length
+  const decisions30 = decisions.data!.filter((d) => d.decidedById === person.id).length
+  const openSession = open.data!.find((s) => s.personId === person.id)
 
   return (
     <>
@@ -123,10 +143,10 @@ export function PersonDetail() {
           <p className="mt-2 flex flex-wrap items-center gap-2">
             <RoleBadge role={person.role} />
             <AccessBadge account={person} />
-            {open ? (
+            {openSession ? (
               <span className="inline-flex items-center gap-1.5 text-sm tabular-nums">
                 <span aria-hidden className="size-2 rounded-full bg-success" />
-                Clocked in since {formatTime(open.clockIn)} ({formatDuration(sessionDurationMs(open, now))})
+                Clocked in since {formatTime(openSession.clockIn)} ({formatDuration(sessionDurationMs(openSession, now))})
               </span>
             ) : (
               <span className="text-sm text-muted-fg">Not clocked in</span>
@@ -156,39 +176,47 @@ export function PersonDetail() {
               tone="attention"
               to="?tab=packages&status=submitted"
             />
-            <KpiStat label="Completed" value={completed30.length} hint="Last 30 days" icon={CircleCheck} to="?tab=packages&status=completed" />
+            <KpiStat label="Completed" value={completed30} hint="Last 30 days" icon={CircleCheck} to="?tab=packages&status=completed" />
           </>
         ) : (
           <>
             <KpiStat label="Responsible for" value={active.length} hint="Active packages" icon={Play} to="?tab=packages&status=active" />
             <KpiStat label="Awaiting their review" value={awaitingReview.length} hint="Submitted rounds" icon={Inbox} tone="attention" to="?tab=reviews" />
             <KpiStat label="Overdue" value={overdue.length} hint="Packages they’re responsible for" icon={TriangleAlert} tone="danger" to="?tab=packages&due=overdue" />
-            <KpiStat label="Decisions" value={decisions30.length} hint="Approvals and feedback, last 30 days" icon={Scale} to="?tab=decisions" />
+            <KpiStat label="Decisions" value={decisions30} hint="Approvals and feedback, last 30 days" icon={Scale} to="?tab=decisions" />
           </>
         )}
       </div>
 
       <TabNav label={`${person.name}’s work`} tabs={tabs} current={tab} />
 
-      {tab === 'packages' && <PackagesTab state={state} person={person} params={params} set={set} now={now} />}
-      {tab === 'reviews' && <ReviewsTab state={state} person={person} now={now} />}
-      {(tab === 'submissions' || tab === 'decisions') && (
-        <RoundsTab state={state} person={person} params={params} set={set} now={now} decisions={tab === 'decisions'} />
+      {tab === 'packages' && (
+        <PackagesTab person={person} packages={work.data!} products={products} lookup={lookup} params={params} set={set} now={now} />
       )}
-      {tab === 'attendance' && <AttendanceTab state={state} person={person} params={params} set={set} now={now} />}
+      {tab === 'reviews' && <ReviewsTab person={person} packages={work.data!} lookup={lookup} now={now} />}
+      {(tab === 'submissions' || tab === 'decisions') && (
+        <RoundsTab person={person} lookup={lookup} params={params} set={set} decisions={tab === 'decisions'} />
+      )}
+      {tab === 'attendance' && <AttendanceTab person={person} params={params} set={set} now={now} />}
     </>
   )
 }
 
 interface TabProps {
-  state: AppState
   person: Person
   params: Params
   set: (key: string, value: string) => void
-  now: Date
 }
 
-function PackagesTab({ state, person, params, set, now }: TabProps) {
+function PackagesTab({
+  person,
+  packages,
+  products,
+  lookup,
+  params,
+  set,
+  now,
+}: TabProps & { packages: PackageSummary[]; products: Product[]; lookup: Lookup; now: Date }) {
   const uid = useId()
   const isEditor = person.role === 'editor'
   const created = !isEditor && params.get('relation') === 'created'
@@ -199,8 +227,7 @@ function PackagesTab({ state, person, params, set, now }: TabProps) {
     due: (params.get('due') ?? '') as PackageFilters['due'],
     ...(isEditor ? { editor: person.id } : created ? {} : { manager: person.id }),
   }
-  const results = filterPackages(state, filters, now).filter((p) => !created || p.createdById === person.id)
-  const filtered = ['relation', 'product', 'status', 'due'].some((k) => params.get(k))
+  const current = filterActive(packages, filters, now).filter((p) => !created || p.createdById === person.id)
 
   return (
     <>
@@ -233,7 +260,7 @@ function PackagesTab({ state, person, params, set, now }: TabProps) {
           label="Product"
           value={filters.product}
           onChange={(v) => set('product', v)}
-          options={state.products.map((p) => ({ value: p.id, label: p.name }))}
+          options={products.map((p) => ({ value: p.id, label: p.name }))}
           all="All products"
         />
         <FilterSelect
@@ -249,35 +276,31 @@ function PackagesTab({ state, person, params, set, now }: TabProps) {
           all="Any deadline"
         />
       </form>
-      <Section
-        title={`${results.length} ${results.length === 1 ? 'package' : 'packages'}`}
-        description="Active work first by deadline, then finished work, most recent first"
-        flush
-      >
-        {results.length ? (
-          <PackageTable
-            state={state}
-            packages={results}
-            now={now}
-            caption={`${person.name}’s packages`}
-            columns={
-              isEditor
-                ? ['package', 'product', 'manager', 'status', 'deadline', 'round']
-                : ['package', 'product', 'editor', 'status', 'deadline', 'round']
-            }
-          />
-        ) : (
-          <EmptyState icon={FolderSearch} title={filtered ? 'No packages match these filters' : 'No packages yet'} compact>
-            {filtered ? 'Try another status, product, or deadline.' : `Packages ${isEditor ? 'assigned to' : 'handled by'} ${person.name} will show up here.`}
-          </EmptyState>
-        )}
-      </Section>
+      <PackageSections
+        lookup={lookup}
+        now={now}
+        active={showsActive(filters) ? current : null}
+        finished={
+          showsFinished(filters)
+            ? {
+                product: filters.product,
+                editor: filters.editor,
+                manager: filters.manager,
+                createdBy: created ? person.id : undefined,
+                status: FINISHED_STATUSES.includes(filters.status as PackageStatus) ? (filters.status as PackageStatus) : undefined,
+              }
+            : null
+        }
+        caption={`${person.name}’s packages`}
+        columns={isEditor ? ['package', 'product', 'manager', 'status', 'deadline', 'round'] : ['package', 'product', 'editor', 'status', 'deadline', 'round']}
+        emptyHint="Try another status, product, or deadline."
+      />
     </>
   )
 }
 
-function ReviewsTab({ state, person, now }: Omit<TabProps, 'params' | 'set'>) {
-  const queue = reviewQueue(state, person.id).filter((p) => p.responsibleManagerId === person.id)
+function ReviewsTab({ person, packages, lookup, now }: { person: Person; packages: PackageSummary[]; lookup: Lookup; now: Date }) {
+  const queue = reviewQueue(packages, person.id).filter((p) => p.responsibleManagerId === person.id)
   return (
     <Section
       title={`${queue.length} awaiting review`}
@@ -286,7 +309,7 @@ function ReviewsTab({ state, person, now }: Omit<TabProps, 'params' | 'set'>) {
     >
       {queue.length ? (
         <PackageTable
-          state={state}
+          lookup={lookup}
           packages={queue}
           now={now}
           caption={`Packages awaiting ${person.name}’s review`}
@@ -299,14 +322,14 @@ function ReviewsTab({ state, person, now }: Omit<TabProps, 'params' | 'set'>) {
   )
 }
 
-function RoundsTab({ state, person, params, set, now, decisions }: TabProps & { decisions: boolean }) {
+function RoundsTab({ person, lookup, params, set, decisions }: TabProps & { lookup: Lookup; decisions: boolean }) {
   const uid = useId()
-  const outcome = params.get('outcome') ?? ''
-  const days = Number(params.get('days') ?? '') || null
-  const all: Submission[] = decisions ? decisionsBy(state, person.id) : submissionsBy(state, person.id)
-  const rows = all.filter(
-    (s) => (!outcome || s.outcome === outcome) && (!days || withinDays(decisions ? s.decidedAt : s.submittedAt, days, now)),
-  )
+  const outcome = (params.get('outcome') ?? '') as SubmissionOutcome | ''
+  const days = Number(params.get('days') ?? '') || undefined
+  // Paged from the server, newest first, with the exact total.
+  const rounds = useRounds({ personId: person.id, as: decisions ? 'decider' : 'submitter', outcome: outcome || undefined, days })
+  const rows = pagedRows(rounds.data)
+  const total = pagedTotal(rounds.data)
   const outcomes = decisions
     ? [
         { value: 'approved', label: 'Approved' },
@@ -337,27 +360,35 @@ function RoundsTab({ state, person, params, set, now, decisions }: TabProps & { 
         />
       </form>
       <Section
-        title={`${rows.length} ${rows.length === 1 ? 'round' : 'rounds'}`}
+        title={rounds.isPending ? 'Rounds' : `${total} ${total === 1 ? 'round' : 'rounds'}`}
         description={decisions ? `Rounds ${person.name} approved or sent back for changes` : `Every round ${person.name} submitted, newest first`}
         flush
       >
-        <SubmissionTable
-          state={state}
-          submissions={rows}
-          caption={decisions ? `${person.name}’s review decisions` : `${person.name}’s submission rounds`}
-          person={decisions ? 'submitter' : 'decider'}
-          emptyText={outcome || days ? 'Try another outcome or period.' : undefined}
-        />
+        {rounds.isPending || rounds.error ? (
+          <PageStatus error={rounds.error?.message} retry={() => void rounds.refetch()} />
+        ) : (
+          <>
+            <SubmissionTable
+              lookup={lookup}
+              submissions={rows}
+              caption={decisions ? `${person.name}’s review decisions` : `${person.name}’s submission rounds`}
+              person={decisions ? 'submitter' : 'decider'}
+              emptyText={outcome || days ? 'Try another outcome or period.' : undefined}
+            />
+            <LoadMore shown={rows.length} total={total} loading={rounds.isFetchingNextPage} onMore={() => void rounds.fetchNextPage()} noun="rounds" />
+          </>
+        )}
       </Section>
     </>
   )
 }
 
-function AttendanceTab({ state, person, params, set, now }: TabProps) {
+function AttendanceTab({ person, params, set, now }: TabProps & { now: Date }) {
   const uid = useId()
   const days = Number(params.get('days') ?? '') || 14
-  const sessions = sessionsFor(state, person.id).filter((s) => withinDays(s.clockIn, days, now))
-  const autoClosed = sessions.filter((s) => s.autoClosed).length
+  const sessions = usePersonAttendance(person.id, days)
+  const rows = sessions.data ?? []
+  const autoClosed = rows.filter((s) => s.autoClosed).length
 
   return (
     <>
@@ -376,7 +407,7 @@ function AttendanceTab({ state, person, params, set, now }: TabProps) {
         />
       </form>
       <Section
-        title={`${formatDuration(totalDurationMs(sessions, now))} over ${sessions.length} ${sessions.length === 1 ? 'session' : 'sessions'}`}
+        title={sessions.data ? `${formatDuration(totalDurationMs(rows, now))} over ${rows.length} ${rows.length === 1 ? 'session' : 'sessions'}` : 'Attendance'}
         description={
           <span className="inline-flex flex-wrap items-center gap-x-3">
             <span>Manila time (PHT); sessions count toward their clock-in date</span>
@@ -390,7 +421,11 @@ function AttendanceTab({ state, person, params, set, now }: TabProps) {
         }
         flush
       >
-        <AttendanceTable state={state} sessions={sessions} now={now} caption={`${person.name}’s attendance, last ${days} days`} />
+        {sessions.isPending || sessions.error ? (
+          <PageStatus error={sessions.error?.message} retry={() => void sessions.refetch()} />
+        ) : (
+          <AttendanceTable sessions={rows} now={now} caption={`${person.name}’s attendance, last ${days} days`} />
+        )}
       </Section>
     </>
   )

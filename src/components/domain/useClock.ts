@@ -1,24 +1,24 @@
 import { useState } from 'react'
-import { useAppState } from '../../data/hooks'
-import { api } from '../../data/store'
-import { openSession } from '../../data/workflow'
+import { api } from '../../data/api'
+import { usePersonAttendance } from '../../data/queries'
 import { useSession } from '../../session/context'
 import { formatTime } from '../../lib/time'
 import { useToast } from '../ui/toast-context'
 
-/** Clock-in/out for the current demo account, shared by the pill and the attendance card. */
+/** Clock-in/out for the signed-in person, shared by the pill, the card, and the Time Clock panel. */
 export function useClock() {
-  const state = useAppState()
   const { me } = useSession()
   const toast = useToast()
   const [confirmingOut, setConfirmingOut] = useState(false)
   const [busy, setBusy] = useState(false)
-  const session = openSession(state, me.id)
+  // The same cached query as Time Clock and My Work (last 31 days), so it isn't fetched twice.
+  const sessions = usePersonAttendance(me.id)
+  const session = sessions.data?.find((s) => s.clockOut === null) ?? null
 
   const clockIn = async () => {
     if (busy) return
     setBusy(true)
-    const result = await api.clockIn(me.id)
+    const result = await api.clockIn()
     setBusy(false)
     if (result.ok) toast.show(`Clocked in at ${formatTime(new Date().toISOString())} PHT`)
     else toast.show(result.error, 'error')
@@ -27,7 +27,7 @@ export function useClock() {
   const clockOut = async () => {
     setConfirmingOut(false)
     setBusy(true)
-    const result = await api.clockOut(me.id)
+    const result = await api.clockOut()
     setBusy(false)
     if (result.ok) toast.show(`Clocked out at ${formatTime(new Date().toISOString())} PHT`)
     else toast.show(result.error, 'error')
@@ -35,6 +35,7 @@ export function useClock() {
 
   return {
     session,
+    loading: sessions.isPending,
     busy,
     clockIn,
     clockOut,

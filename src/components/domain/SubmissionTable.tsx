@@ -1,15 +1,16 @@
 import { ExternalLink, Inbox } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
-import { makeLookup } from '../../data/selectors'
-import type { AppState, Submission } from '../../data/types'
+import type { Lookup } from '../../data/selectors'
+import type { RoundWithPackage, Submission } from '../../data/types'
 import { formatDateTime } from '../../lib/time'
 import { EmptyState } from '../ui/EmptyState'
 import { OutcomeBadge } from './StatusBadge'
+import { useIsWide } from '../../data/hooks'
 
 interface SubmissionTableProps {
-  state: AppState
-  submissions: Submission[]
+  lookup: Lookup
+  submissions: RoundWithPackage[]
   caption: string
   /** Show who submitted the round (a manager's decisions) or who decided it (an editor's rounds). */
   person: 'submitter' | 'decider'
@@ -41,9 +42,8 @@ function RoundLinks({ sub }: { sub: Submission }) {
 }
 
 /** Submission rounds across packages: dense table on ≥768px, stacked cards on mobile. */
-export function SubmissionTable({ state, submissions, caption, person, emptyText }: SubmissionTableProps) {
-  const lookup = makeLookup(state)
-  const packages = new Map(state.packages.map((p) => [p.id, p]))
+export function SubmissionTable({ lookup, submissions, caption, person, emptyText }: SubmissionTableProps) {
+  const wide = useIsWide()
   if (!submissions.length)
     return (
       <EmptyState icon={Inbox} title="No submission rounds" compact>
@@ -51,8 +51,8 @@ export function SubmissionTable({ state, submissions, caption, person, emptyText
       </EmptyState>
     )
 
-  const packageCell = (sub: Submission): ReactNode => {
-    const pkg = packages.get(sub.packageId)
+  const packageCell = (sub: RoundWithPackage): ReactNode => {
+    const pkg = sub.package
     return pkg ? (
       <span className="flex flex-col">
         <Link to={`/packages/${pkg.id}`} className="font-semibold text-fg underline-offset-2 hover:text-primary hover:underline">
@@ -74,54 +74,56 @@ export function SubmissionTable({ state, submissions, caption, person, emptyText
 
   return (
     <>
-      <table className="hidden w-full border-collapse text-left text-sm md:table">
-        <caption className="sr-only">{caption}</caption>
-        <thead className="bg-surface-2 text-xs font-semibold text-muted-fg">
-          <tr>
-            <th scope="col" className="px-4 py-2">Package</th>
-            <th scope="col" className="px-4 py-2">Submitted</th>
-            <th scope="col" className="px-4 py-2">Outcome</th>
-            <th scope="col" className="px-4 py-2">{personHead}</th>
-            <th scope="col" className="px-4 py-2">Decided</th>
-            <th scope="col" className="px-4 py-2">Links</th>
-          </tr>
-        </thead>
-        <tbody>
-          {submissions.map((sub) => (
-            <tr key={sub.id} className="border-t border-border align-top transition-colors duration-150 hover:bg-surface-2/60">
-              <td className="min-w-48 px-4 py-3">{packageCell(sub)}</td>
-              <td className="px-4 py-3 tabular-nums">{formatDateTime(sub.submittedAt)}</td>
-              <td className="px-4 py-3">
-                <OutcomeBadge outcome={sub.outcome} />
-                {sub.feedbackNote && <p className="mt-1 max-w-64 text-xs text-muted-fg">“{sub.feedbackNote}”</p>}
-              </td>
-              <td className="px-4 py-3">{personCell(sub)}</td>
-              <td className="px-4 py-3 tabular-nums">{sub.decidedAt ? formatDateTime(sub.decidedAt) : '—'}</td>
-              <td className="px-4 py-3">
-                <RoundLinks sub={sub} />
-              </td>
+      {wide ? (
+        <table className="w-full border-collapse text-left text-sm">
+          <caption className="sr-only">{caption}</caption>
+          <thead className="bg-surface-2 text-xs font-semibold text-muted-fg">
+            <tr>
+              <th scope="col" className="px-4 py-2">Package</th>
+              <th scope="col" className="px-4 py-2">Submitted</th>
+              <th scope="col" className="px-4 py-2">Outcome</th>
+              <th scope="col" className="px-4 py-2">{personHead}</th>
+              <th scope="col" className="px-4 py-2">Decided</th>
+              <th scope="col" className="px-4 py-2">Links</th>
             </tr>
+          </thead>
+          <tbody>
+            {submissions.map((sub) => (
+              <tr key={sub.id} className="border-t border-border align-top transition-colors duration-150 hover:bg-surface-2/60">
+                <td className="min-w-48 px-4 py-3">{packageCell(sub)}</td>
+                <td className="px-4 py-3 tabular-nums">{formatDateTime(sub.submittedAt)}</td>
+                <td className="px-4 py-3">
+                  <OutcomeBadge outcome={sub.outcome} />
+                  {sub.feedbackNote && <p className="mt-1 max-w-64 text-xs text-muted-fg">“{sub.feedbackNote}”</p>}
+                </td>
+                <td className="px-4 py-3">{personCell(sub)}</td>
+                <td className="px-4 py-3 tabular-nums">{sub.decidedAt ? formatDateTime(sub.decidedAt) : '—'}</td>
+                <td className="px-4 py-3">
+                  <RoundLinks sub={sub} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <ul className="divide-y divide-border" aria-label={caption}>
+          {submissions.map((sub) => (
+            <li key={sub.id} className="flex flex-col gap-2 px-4 py-3 text-sm">
+              <div className="flex items-start justify-between gap-2">
+                {packageCell(sub)}
+                <OutcomeBadge outcome={sub.outcome} />
+              </div>
+              <p className="text-xs text-muted-fg tabular-nums">
+                Submitted {formatDateTime(sub.submittedAt)}
+                {person === 'submitter' && ` by ${lookup.personName(sub.submittedById)}`}
+                {sub.decidedAt && ` · Decided ${decision(sub)}`}
+              </p>
+              {sub.feedbackNote && <p className="text-xs text-muted-fg">“{sub.feedbackNote}”</p>}
+              <RoundLinks sub={sub} />
+            </li>
           ))}
-        </tbody>
-      </table>
-
-      <ul className="divide-y divide-border md:hidden" aria-label={caption}>
-        {submissions.map((sub) => (
-          <li key={sub.id} className="flex flex-col gap-2 px-4 py-3 text-sm">
-            <div className="flex items-start justify-between gap-2">
-              {packageCell(sub)}
-              <OutcomeBadge outcome={sub.outcome} />
-            </div>
-            <p className="text-xs text-muted-fg tabular-nums">
-              Submitted {formatDateTime(sub.submittedAt)}
-              {person === 'submitter' && ` by ${lookup.personName(sub.submittedById)}`}
-              {sub.decidedAt && ` · Decided ${decision(sub)}`}
-            </p>
-            {sub.feedbackNote && <p className="text-xs text-muted-fg">“{sub.feedbackNote}”</p>}
-            <RoundLinks sub={sub} />
-          </li>
-        ))}
-      </ul>
+        </ul>
+      )}
     </>
   )
 }

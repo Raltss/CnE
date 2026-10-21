@@ -1,21 +1,20 @@
 import { Clapperboard, Truck } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { api } from '../../data/store'
-import type { WorkPackage } from '../../data/types'
+import { api } from '../../data/api'
+import type { PackageSummary } from '../../data/types'
 import { buttonClasses, fieldAria, inputClasses } from '../../lib/styles'
 import { Callout } from '../ui/Callout'
 import { Field } from '../ui/Field'
 import { useToast } from '../ui/toast-context'
 
 interface SubmissionFormProps {
-  pkg: WorkPackage
-  editorId: string
+  pkg: PackageSummary
   managerName: string
   nextRound: number
 }
 
 /** Editor submits links for a new round. At least one link is required. */
-export function SubmissionForm({ pkg, editorId, managerName, nextRound }: SubmissionFormProps) {
+export function SubmissionForm({ pkg, managerName, nextRound }: SubmissionFormProps) {
   const toast = useToast()
   const [reviewLink, setReviewLink] = useState('')
   const [deliveryLink, setDeliveryLink] = useState('')
@@ -26,7 +25,7 @@ export function SubmissionForm({ pkg, editorId, managerName, nextRound }: Submis
     event.preventDefault()
     if (busy) return
     setBusy(true)
-    const result = await api.submitForReview(editorId, pkg.id, { reviewLink, deliveryLink })
+    const result = await api.submitForReview(pkg.id, { reviewLink, deliveryLink })
     setBusy(false)
     if (!result.ok) {
       const fieldErrors = result.fieldErrors ?? { form: result.error }

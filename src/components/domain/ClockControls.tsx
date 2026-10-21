@@ -37,7 +37,7 @@ export function ClockPill() {
       <button
         type="button"
         onClick={session ? clock.askClockOut : clock.clockIn}
-        disabled={clock.busy}
+        disabled={clock.busy || clock.loading}
         className={cx(
           'inline-flex min-h-10 items-center gap-2 rounded-full border px-3 text-sm font-semibold transition-colors duration-150',
           session
@@ -92,7 +92,7 @@ export function ClockCard() {
       <button
         type="button"
         onClick={session ? clock.askClockOut : clock.clockIn}
-        disabled={clock.busy}
+        disabled={clock.busy || clock.loading}
         className={buttonClasses(session ? 'secondary' : 'primary', 'md', 'w-full')}
       >
         {session ? <LogOut aria-hidden className="size-4" /> : <LogIn aria-hidden className="size-4" />}
@@ -139,7 +139,7 @@ export function ClockPanel() {
       <button
         type="button"
         onClick={session ? clock.askClockOut : clock.clockIn}
-        disabled={clock.busy}
+        disabled={clock.busy || clock.loading}
         className={buttonClasses(session ? 'secondary' : 'primary', 'md', 'min-h-12 w-full max-w-xs text-base')}
       >
         {session ? <LogOut aria-hidden className="size-5" /> : <LogIn aria-hidden className="size-5" />}

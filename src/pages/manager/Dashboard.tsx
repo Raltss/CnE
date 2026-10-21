@@ -6,15 +6,15 @@ import { PackageList } from '../../components/domain/PackageList'
 import { ReviewDialog } from '../../components/domain/ReviewDialog'
 import { Dialog } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { PageStatus } from '../../components/ui/PageStatus'
 import { PageHeader, Section } from '../../components/ui/Section'
-import { useAppState, useNow } from '../../data/hooks'
-import { byDeadline, editorWorkload, isActive, isDueWithin, isOverdue, lastSubmittedAt, makeLookup } from '../../data/selectors'
-import type { WorkPackage } from '../../data/types'
-import { latestSubmission } from '../../data/workflow'
+import { useNow } from '../../data/hooks'
+import { pageStatus, useActiveWork, useDirectory } from '../../data/queries'
+import { editorWorkload, isActive, isDueWithin, isOverdue, reviewQueue } from '../../data/selectors'
+import type { PackageSummary } from '../../data/types'
 import { buttonClasses } from '../../lib/styles'
 import { formatDate, formatDistance, HOUR_MS } from '../../lib/time'
 import { useSession } from '../../session/context'
-import { reviewQueue } from './reviewQueue'
 
 /** How many rows a dashboard list shows before pointing to the full page. */
 const PREVIEW_ROWS = 5
@@ -22,24 +22,46 @@ const PREVIEW_ROWS = 5
 type Drill = 'review' | 'overdue' | 'due48' | 'active'
 
 export function ManagerDashboard() {
-  const state = useAppState()
   const now = useNow()
   const { me } = useSession()
-  const lookup = makeLookup(state)
+  const work = useActiveWork()
+  const { people, lookup, queries } = useDirectory()
   const [drill, setDrill] = useState<Drill | null>(null)
   const [reviewId, setReviewId] = useState<string | null>(null)
   const [editorId, setEditorId] = useState<string | null>(null)
 
-  const queue = reviewQueue(state, me.id)
+  // The header needs no data, so it shows right away; the rest waits for its queries.
+  const header = (
+    <PageHeader
+      title={`Hi, ${me.name.split(' ')[0]}`}
+      description={`${formatDate(now.toISOString())} · Here’s what needs your attention.`}
+      actions={
+        <Link to="/packages/new" className={buttonClasses('primary')}>
+          New package
+        </Link>
+      }
+    />
+  )
+  const status = pageStatus(work, ...queries)
+  if (status.pending || status.error)
+    return (
+      <>
+        {header}
+        <PageStatus {...status} />
+      </>
+    )
+
+  // Current work is loaded completely, so every number below covers all of it.
+  const active = work.data!.filter(isActive)
+  const queue = reviewQueue(active, me.id)
   const mineInQueue = queue.filter((p) => p.responsibleManagerId === me.id).length
-  const active = state.packages.filter(isActive).sort(byDeadline)
   const overdue = active.filter((p) => isOverdue(p, now))
   const due48 = active.filter((p) => isDueWithin(p, now, 48 * HOUR_MS))
-  const workload = editorWorkload(state, now)
+  const workload = editorWorkload(people, active, now)
   const maxLoad = Math.max(1, ...workload.map((w) => w.active))
   const busyEditors = workload.filter((w) => w.active > 0).length
 
-  const drills: Record<Drill, { title: string; description: string; packages: WorkPackage[]; to: string; linkLabel: string }> = {
+  const drills: Record<Drill, { title: string; description: string; packages: PackageSummary[]; to: string; linkLabel: string }> = {
     review: {
       title: 'Awaiting review',
       description: 'Submitted packages, yours first. Open one to approve it or mark Apply Feedback.',
@@ -75,15 +97,7 @@ export function ManagerDashboard() {
 
   return (
     <>
-      <PageHeader
-        title={`Hi, ${me.name.split(' ')[0]}`}
-        description={`${formatDate(now.toISOString())} · Here’s what needs your attention.`}
-        actions={
-          <Link to="/packages/new" className={buttonClasses('primary')}>
-            New package
-          </Link>
-        }
-      />
+      {header}
 
       <div className="mb-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <KpiStat
@@ -135,7 +149,7 @@ export function ManagerDashboard() {
             <>
               <ul className="divide-y divide-border" aria-label="Packages awaiting review">
                 {queue.slice(0, PREVIEW_ROWS).map((pkg) => {
-                  const submittedAt = lastSubmittedAt(state, pkg.id)
+                  const submittedAt = pkg.latest?.submittedAt
                   return (
                     <li key={pkg.id} className="flex items-center justify-between gap-4 px-5 py-4">
                       <div className="min-w-0">
@@ -146,7 +160,7 @@ export function ManagerDashboard() {
                           )}
                         </p>
                         <p className="mt-0.5 text-sm text-muted-fg tabular-nums">
-                          {lookup.personName(pkg.editorId)} · Round {latestSubmission(state, pkg.id)?.round ?? 1}
+                          {lookup.personName(pkg.editorId)} · Round {pkg.latest?.round ?? 1}
                           {submittedAt && ` · ${formatDistance(now.getTime() - new Date(submittedAt).getTime())} ago`}
                         </p>
                       </div>
@@ -249,7 +263,7 @@ export function ManagerDashboard() {
         {openDrill &&
           (openDrill.packages.length ? (
             <div className="-mx-5 border-y border-border">
-              <PackageList state={state} packages={openDrill.packages} now={now} label={openDrill.title} />
+              <PackageList lookup={lookup} packages={openDrill.packages} now={now} label={openDrill.title} />
             </div>
           ) : (
             <EmptyState icon={Inbox} title="Nothing here right now" compact />
@@ -278,7 +292,7 @@ export function ManagerDashboard() {
           (editorLoad.active ? (
             <div className="-mx-5 border-y border-border">
               <PackageList
-                state={state}
+                lookup={lookup}
                 packages={active.filter((p) => p.editorId === editorLoad.editor.id)}
                 now={now}
                 label={`${editorLoad.editor.name}’s active packages`}
@@ -292,7 +306,7 @@ export function ManagerDashboard() {
           ))}
       </Dialog>
 
-      <ReviewDialog state={state} pkg={reviewing} me={me} now={now} onClose={() => setReviewId(null)} />
+      <ReviewDialog lookup={lookup} pkg={reviewing} now={now} onClose={() => setReviewId(null)} />
     </>
   )
 }

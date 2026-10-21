@@ -2,20 +2,19 @@ import { createContext, useContext } from 'react'
 import type { Person } from '../data/types'
 
 export interface AppSession {
-  /** The signed-in staff member (or, in demo mode, the account being viewed). */
+  /** The signed-in staff member. */
   me: Person
-  /** Demo mode only: view the app as another demo account. Not authentication. */
-  switchAccount: ((personId: string) => void) | null
-  /** Real sign-in only: end the Supabase session. */
-  signOut: (() => Promise<void>) | null
-  /** Real sign-in only: check the current password, then set a new one. Resolves to an error message, or null. */
-  changePassword: ((current: string, next: string) => Promise<string | null>) | null
+  /** Their sign-in email. */
+  email: string
+  signOut: () => Promise<void>
+  /** Check the current password, then set a new one. Resolves to an error message, or null. */
+  changePassword: (current: string, next: string) => Promise<string | null>
 }
 
 export const SessionContext = createContext<AppSession | null>(null)
 
 export function useSession(): AppSession {
   const ctx = useContext(SessionContext)
-  if (!ctx) throw new Error('useSession must be used inside <AuthProvider> or <DemoSessionProvider>')
+  if (!ctx) throw new Error('useSession must be used inside <AuthProvider>')
   return ctx
 }

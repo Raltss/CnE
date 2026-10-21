@@ -5,12 +5,13 @@ import { AddProductDialog } from '../../components/domain/AddProductDialog'
 import { Callout } from '../../components/ui/Callout'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Field } from '../../components/ui/Field'
+import { PageStatus } from '../../components/ui/PageStatus'
 import { PageHeader } from '../../components/ui/Section'
 import { useToast } from '../../components/ui/toast-context'
-import { useAppState } from '../../data/hooks'
+import { api } from '../../data/api'
+import { pageStatus, useDirectory, usePackage } from '../../data/queries'
 import { editors, managers } from '../../data/selectors'
-import { api } from '../../data/store'
-import type { AppState, PackageInput, WorkPackage } from '../../data/types'
+import type { PackageInput, Person, Product, WorkPackage } from '../../data/types'
 import { buttonClasses, cardClasses, cx, fieldAria, inputClasses } from '../../lib/styles'
 import { DAY_MS, fromManilaInputValue, toManilaInputValue } from '../../lib/time'
 import { useSession } from '../../session/context'
@@ -63,13 +64,16 @@ const FIELD_ORDER = ['title', 'productId', 'briefLink', 'referenceLinks', 'deliv
 
 export function PackageFormPage() {
   const { id } = useParams()
-  const state = useAppState()
-  const pkg = id ? (state.packages.find((p) => p.id === id) ?? null) : null
+  const detail = usePackage(id)
+  const { people, products, queries } = useDirectory()
+  const status = pageStatus(...queries, ...(id ? [detail] : []))
+  if (status.pending || status.error) return <PageStatus {...status} />
+  const pkg = id ? (detail.data?.pkg ?? null) : null
 
   if (id && !pkg)
     return (
       <EmptyState icon={SearchX} title="Package not found" tone="error" action={<Link to="/packages" className={buttonClasses('primary')}>Back to packages</Link>}>
-        It may have been removed by a demo data reset.
+        It may have been removed, or the link is wrong.
       </EmptyState>
     )
   if (pkg?.status === 'completed')
@@ -79,10 +83,10 @@ export function PackageFormPage() {
       </EmptyState>
     )
   // Remount the form when switching between packages so its state resets.
-  return <PackageForm key={pkg?.id ?? 'new'} state={state} pkg={pkg} />
+  return <PackageForm key={pkg?.id ?? 'new'} people={people} products={products} pkg={pkg} />
 }
 
-function PackageForm({ state, pkg }: { state: AppState; pkg: WorkPackage | null }) {
+function PackageForm({ people, products, pkg }: { people: Person[]; products: Product[]; pkg: WorkPackage | null }) {
   const { me } = useSession()
   const navigate = useNavigate()
   const toast = useToast()
@@ -114,7 +118,7 @@ function PackageForm({ state, pkg }: { state: AppState; pkg: WorkPackage | null 
     const deadline = fromManilaInputValue(values.deadline)
     const input: PackageInput = { ...values, deadline: deadline ?? '' }
     setSaving(true)
-    const result = pkg ? await api.updatePackage(me.id, pkg.id, input) : await api.createPackage(me.id, input)
+    const result = pkg ? await api.updatePackage(pkg.id, input, pkg.deadline) : await api.createPackage(input)
     setSaving(false)
     if (!result.ok) {
       const fieldErrors = { ...(result.fieldErrors ?? {}) } as Record<string, string>
@@ -128,7 +132,7 @@ function PackageForm({ state, pkg }: { state: AppState; pkg: WorkPackage | null 
       if (first) document.getElementById(`pkg-${first.replace('.', '-')}`)?.focus()
       return
     }
-    toast.show(pkg ? 'Package updated' : `Package ${result.value.code} created and assigned`)
+    toast.show(pkg ? 'Package updated' : 'code' in result.value ? `Package ${result.value.code} created and assigned` : 'Package created and assigned')
     navigate(`/packages/${result.value.id}`)
   }
 
@@ -171,17 +175,17 @@ function PackageForm({ state, pkg }: { state: AppState; pkg: WorkPackage | null 
             label="Product"
             required
             error={err('productId')}
-            hint={state.products.length ? undefined : 'No products yet. Add the first one.'}
+            hint={products.length ? undefined : 'No products yet. Add the first one.'}
           >
             <div className="flex flex-col gap-2 sm:flex-row">
               <select
-                {...fieldAria('pkg-productId', { error: err('productId'), hasHint: !state.products.length })}
+                {...fieldAria('pkg-productId', { error: err('productId'), hasHint: !products.length })}
                 value={values.productId}
                 onChange={(e) => set('productId', e.target.value)}
                 className={inputClasses(Boolean(err('productId')))}
               >
                 <option value="">Choose a product</option>
-                {state.products.map((p) => (
+                {products.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -301,7 +305,7 @@ function PackageForm({ state, pkg }: { state: AppState; pkg: WorkPackage | null 
                 className={inputClasses(Boolean(err('editorId')))}
               >
                 <option value="">Choose an editor</option>
-                {editors(state).map((p) => (
+                {editors(people).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -322,7 +326,7 @@ function PackageForm({ state, pkg }: { state: AppState; pkg: WorkPackage | null 
                 className={inputClasses(Boolean(err('responsibleManagerId')))}
               >
                 <option value="">Choose a manager</option>
-                {managers(state).map((p) => (
+                {managers(people).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>

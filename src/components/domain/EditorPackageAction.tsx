@@ -1,13 +1,13 @@
 import { Play } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { api } from '../../data/store'
-import type { WorkPackage } from '../../data/types'
+import { api } from '../../data/api'
+import type { PackageSummary } from '../../data/types'
 import { buttonClasses } from '../../lib/styles'
 import { useToast } from '../ui/toast-context'
 
 /** The editor's next step for a package: Start inline, or go to the package to submit. */
-export function EditorPackageAction({ pkg, editorId }: { pkg: WorkPackage; editorId: string }) {
+export function EditorPackageAction({ pkg }: { pkg: PackageSummary }) {
   const toast = useToast()
   const [busy, setBusy] = useState(false)
   if (pkg.status === 'assigned')
@@ -18,7 +18,7 @@ export function EditorPackageAction({ pkg, editorId }: { pkg: WorkPackage; edito
         disabled={busy}
         onClick={async () => {
           setBusy(true)
-          const r = await api.startWork(editorId, pkg.id)
+          const r = await api.startWork(pkg.id)
           setBusy(false)
           toast.show(r.ok ? `Started work on ${pkg.title}` : r.error, r.ok ? 'success' : 'error')
         }}

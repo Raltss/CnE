@@ -1,12 +1,12 @@
 import { Link } from 'react-router'
-import { makeLookup, isOverdue } from '../../data/selectors'
-import type { AppState, WorkPackage } from '../../data/types'
+import { isOverdue, type Lookup } from '../../data/selectors'
+import type { PackageSummary } from '../../data/types'
 import { DeadlineBadge } from './DeadlineBadge'
 import { OverdueBadge, StatusBadge } from './StatusBadge'
 
 interface PackageListProps {
-  state: AppState
-  packages: WorkPackage[]
+  lookup: Lookup
+  packages: PackageSummary[]
   now: Date
   /** Accessible name for the list. */
   label: string
@@ -15,8 +15,7 @@ interface PackageListProps {
 }
 
 /** Roomy, readable package rows for dialogs and the deadlines page. */
-export function PackageList({ state, packages, now, label, hideEditor }: PackageListProps) {
-  const lookup = makeLookup(state)
+export function PackageList({ lookup, packages, now, label, hideEditor }: PackageListProps) {
   return (
     <ul className="divide-y divide-border" aria-label={label}>
       {packages.map((pkg) => (

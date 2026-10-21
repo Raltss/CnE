@@ -4,7 +4,7 @@
 //      │
 //      └──────▶ signed in ─▶ load profile ─▶ not approved / deactivated ─▶ "Waiting for access"
 //                                       ├─▶ temporary password from an admin ─▶ "Choose your password"
-//                                       └─▶ active staff ─▶ load data ─▶ the app
+//                                       └─▶ active staff ─▶ the app (each page loads its own data)
 //
 // supabase-js keeps the session in localStorage and refreshes the token, so a
 // page reload restores the session without signing in again.
@@ -16,7 +16,6 @@ import { Login } from '../pages/auth/Login'
 import { SetPassword } from '../pages/auth/SetPassword'
 import { buttonClasses } from '../lib/styles'
 import { SessionContext } from './context'
-import { DataGate } from './DataGate'
 
 type AuthState = { phase: 'restoring' } | { phase: 'signed_out' } | { phase: 'signed_in'; userId: string; email: string }
 
@@ -24,8 +23,22 @@ function fromSession(session: Session | null): AuthState {
   return session ? { phase: 'signed_in', userId: session.user.id, email: session.user.email ?? '' } : { phase: 'signed_out' }
 }
 
-export function AuthProvider({ supabase, children }: { supabase: SupabaseClient; children: ReactNode }) {
+export function AuthProvider({
+  supabase,
+  onSignedIn,
+  children,
+}: {
+  supabase: SupabaseClient
+  /** Called once a session exists, e.g. to start the first data reads while the profile loads. */
+  onSignedIn?: () => void
+  children: ReactNode
+}) {
   const [auth, setAuth] = useState<AuthState>({ phase: 'restoring' })
+  const signedIn = auth.phase === 'signed_in'
+
+  useEffect(() => {
+    if (signedIn) onSignedIn?.()
+  }, [signedIn, onSignedIn])
 
   useEffect(() => {
     // Keep the same object while the user is unchanged, so token refreshes don't reload the profile.
@@ -127,7 +140,7 @@ function StaffGate({
   )
 
   const me = profile.phase === 'ready' ? profile.me : null
-  const session = useMemo(() => (me ? { me, switchAccount: null, signOut, changePassword } : null), [me, signOut, changePassword])
+  const session = useMemo(() => (me ? { me, email, signOut, changePassword } : null), [me, email, signOut, changePassword])
 
   if (profile.phase === 'loading') return <StatusScreen title="Signing you in" message="Checking your account…" />
   if (profile.phase === 'error')
@@ -172,11 +185,7 @@ function StaffGate({
       />
     )
 
-  return (
-    <SessionContext.Provider value={session}>
-      <DataGate onSignOut={() => void signOut()}>{children}</DataGate>
-    </SessionContext.Provider>
-  )
+  return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>
 }
 
 /** Supabase Auth's password errors, in plain words. */

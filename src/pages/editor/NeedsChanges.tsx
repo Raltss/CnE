@@ -1,17 +1,21 @@
 import { CircleCheck } from 'lucide-react'
 import { FeedbackCard } from '../../components/domain/FeedbackCard'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { PageStatus } from '../../components/ui/PageStatus'
 import { PageHeader } from '../../components/ui/Section'
-import { useAppState, useNow } from '../../data/hooks'
+import { useNow } from '../../data/hooks'
+import { pageStatus, useActiveWork, useDirectory } from '../../data/queries'
 import { cardClasses } from '../../lib/styles'
 import { useSession } from '../../session/context'
-import { myNeedsChanges } from './editorData'
 
 export function NeedsChanges() {
-  const state = useAppState()
   const now = useNow()
   const { me } = useSession()
-  const items = myNeedsChanges(state, me.id)
+  const work = useActiveWork()
+  const { lookup, queries } = useDirectory()
+  const status = pageStatus(work, ...queries)
+  if (status.pending || status.error) return <PageStatus {...status} />
+  const items = work.data!.filter((p) => p.editorId === me.id && p.status === 'apply_feedback')
   return (
     <>
       <PageHeader
@@ -21,7 +25,7 @@ export function NeedsChanges() {
       {items.length ? (
         <div className="grid gap-3 lg:grid-cols-2">
           {items.map((pkg) => (
-            <FeedbackCard key={pkg.id} state={state} pkg={pkg} now={now} />
+            <FeedbackCard key={pkg.id} lookup={lookup} pkg={pkg} now={now} />
           ))}
         </div>
       ) : (

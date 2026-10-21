@@ -1,6 +1,6 @@
 import { Inbox, Truck, Clapperboard } from 'lucide-react'
-import { makeLookup, submissionsFor } from '../../data/selectors'
-import type { AppState, Submission } from '../../data/types'
+import type { Lookup } from '../../data/selectors'
+import type { Submission } from '../../data/types'
 import { OUTCOME_META } from '../../lib/status'
 import { cx } from '../../lib/styles'
 import { formatDateTime } from '../../lib/time'
@@ -15,9 +15,8 @@ function sameLinksAs(sub: Submission, all: Submission[]) {
 }
 
 /** Every round is listed separately, newest first, even when links are reused. */
-export function SubmissionHistory({ state, packageId }: { state: AppState; packageId: string }) {
-  const lookup = makeLookup(state)
-  const subs = submissionsFor(state, packageId)
+/** `rounds` are newest first, as the package query returns them. */
+export function SubmissionHistory({ rounds: subs, lookup }: { rounds: Submission[]; lookup: Lookup }) {
   if (!subs.length)
     return (
       <EmptyState icon={Inbox} title="No submissions yet" compact>

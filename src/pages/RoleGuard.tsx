@@ -11,7 +11,7 @@ import { useSession } from '../session/context'
  * database (RLS and the workflow functions) is what actually enforces access.
  */
 export function RoleGuard({ roles }: { roles: Role[] }) {
-  const { me, switchAccount } = useSession()
+  const { me } = useSession()
   if (roles.includes(me.role)) return <Outlet />
   return (
     <EmptyState
@@ -24,7 +24,7 @@ export function RoleGuard({ roles }: { roles: Role[] }) {
         </Link>
       }
     >
-      You’re signed in as {me.name} ({me.role}).{switchAccount && ' Switch accounts in the demo bar to see this page.'}
+      You’re signed in as {me.name} ({me.role}).
     </EmptyState>
   )
 }
