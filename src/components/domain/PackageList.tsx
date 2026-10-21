@@ -26,7 +26,7 @@ export function PackageList({ state, packages, now, label, hideEditor }: Package
               {pkg.title}
             </Link>
             <p className="mt-0.5 text-sm text-muted-fg">
-              {lookup.clientName(pkg.clientId)} · {lookup.productName(pkg.productId)}
+              {lookup.productName(pkg.productId)}
               {!hideEditor && <> · {lookup.personName(pkg.editorId)}</>}
             </p>
           </div>

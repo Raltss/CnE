@@ -10,7 +10,6 @@ import type {
   AppNotification,
   AppState,
   AttendanceSession,
-  Client,
   PackageInput,
   Person,
   Product,
@@ -19,7 +18,7 @@ import type {
   Submission,
   WorkPackage,
 } from './types'
-import { validatePackageInput, validateStaffAccountInput, validateSubmissionInput } from './validation'
+import { validatePackageInput, validateProductName, validateStaffAccountInput, validateSubmissionInput } from './validation'
 
 // ── Row shapes (as stored in supabase/migrations) ───────────────────────────
 
@@ -33,22 +32,14 @@ interface ProfileRow {
   created_at: string
   must_change_password: boolean
 }
-interface ClientRow {
-  id: string
-  name: string
-  manager_id: string
-}
 interface ProductRow {
   id: string
-  client_id: string
   name: string
-  manager_id: string | null
 }
 interface PackageRow {
   id: string
   code: string
   title: string
-  client_id: string
   product_id: string
   description: string
   brief_link: string
@@ -129,7 +120,6 @@ const LIVE_TABLES = ['packages', 'submissions', 'activity', 'attendance_sessions
 
 function toState(rows: {
   profiles: ProfileRow[]
-  clients: ClientRow[]
   products: ProductRow[]
   packages: PackageRow[]
   submissions: SubmissionRow[]
@@ -151,13 +141,11 @@ function toState(rows: {
   return {
     accounts,
     people: accounts.flatMap((a) => (a.role ? [{ id: a.id, name: a.name, role: a.role, title: a.title, isActive: a.isActive }] : [])),
-    clients: rows.clients.map<Client>((c) => ({ id: c.id, name: c.name, managerId: c.manager_id })),
-    products: rows.products.map<Product>((p) => ({ id: p.id, clientId: p.client_id, name: p.name, managerId: p.manager_id })),
+    products: rows.products.map<Product>((p) => ({ id: p.id, name: p.name })),
     packages: rows.packages.map<WorkPackage>((p) => ({
       id: p.id,
       code: p.code,
       title: p.title,
-      clientId: p.client_id,
       productId: p.product_id,
       description: p.description,
       briefLink: p.brief_link,
@@ -269,10 +257,9 @@ export function createSupabaseBackend(supabase: SupabaseClient): Backend {
     const mine = ++generation
     if (!state) setStatus({ phase: 'loading' })
     const since = new Date(Date.now() - ATTENDANCE_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    const [profiles, clients, products, packages, submissions, activity, attendance, notifications, staffActivity] = await Promise.all([
+    const [profiles, products, packages, submissions, activity, attendance, notifications, staffActivity] = await Promise.all([
       supabase.from('profiles').select('id, email, full_name, title, role, is_active, created_at, must_change_password').order('full_name'),
-      supabase.from('clients').select('id, name, manager_id').order('name'),
-      supabase.from('products').select('id, client_id, name, manager_id').order('name'),
+      supabase.from('products').select('id, name').order('name'),
       supabase.from('packages').select('*'),
       supabase.from('submissions').select('*'),
       supabase.from('activity').select('*').order('at', { ascending: false }),
@@ -281,7 +268,7 @@ export function createSupabaseBackend(supabase: SupabaseClient): Backend {
       supabase.from('staff_activity').select('*').order('at', { ascending: false }).limit(STAFF_ACTIVITY_LIMIT),
     ])
     if (mine !== generation) return
-    const failed = [profiles, clients, products, packages, submissions, activity, attendance, notifications, staffActivity].find(
+    const failed = [profiles, products, packages, submissions, activity, attendance, notifications, staffActivity].find(
       (r) => r.error,
     )
     if (failed?.error) {
@@ -291,7 +278,6 @@ export function createSupabaseBackend(supabase: SupabaseClient): Backend {
     }
     state = toState({
       profiles: profiles.data as ProfileRow[],
-      clients: clients.data as ClientRow[],
       products: products.data as ProductRow[],
       packages: packages.data as PackageRow[],
       submissions: submissions.data as SubmissionRow[],
@@ -320,7 +306,6 @@ export function createSupabaseBackend(supabase: SupabaseClient): Backend {
   function packageArgs(input: PackageInput) {
     return {
       p_title: input.title,
-      p_client_id: input.clientId,
       p_product_id: input.productId,
       p_description: input.description,
       p_brief_link: input.briefLink,
@@ -355,6 +340,14 @@ export function createSupabaseBackend(supabase: SupabaseClient): Backend {
         packageFieldErrors(input, previous?.deadline) ??
         savedPackage(await rpc('update_package', { p_package_id: packageId, ...packageArgs(input) }))
       )
+    },
+    async createProduct(_actorId, name) {
+      const problem = state ? validateProductName(state, name) : undefined
+      if (problem) return fail(problem, { name: problem })
+      const result = await rpc('create_product', { p_name: name.trim() })
+      if (!result.ok) return { ...result, fieldErrors: { name: result.error } }
+      const product = state?.products.find((p) => p.id === result.value)
+      return product ? { ok: true, value: product } : fail('Added, but the product couldn’t be loaded. Refresh the page.')
     },
     startWork: (_actorId, packageId) => rpc('start_work', { p_package_id: packageId }),
     async submitForReview(_actorId, packageId, input) {

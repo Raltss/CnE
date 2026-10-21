@@ -117,8 +117,7 @@ set local role authenticated;
 select test.as_user('00000000-0000-0000-0000-000000000099');
 select test.expect((select count(*) from public.profiles) = 1, 'pending user sees only their own profile');
 select test.expect((select count(*) from public.clients) = 0, 'pending user sees no clients');
-select test.expect_error($$select public.create_package('X', 'c0000000-0000-0000-0000-000000000001',
-  'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
+select test.expect_error($$select public.create_package('X', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
   '00000000-0000-0000-0000-000000000001', now() + interval '1 day')$$, 'Only managers', 'pending user cannot create packages');
 select test.expect_error('select public.clock_in()', 'Only managers and editors', 'pending user cannot clock in');
 
@@ -187,8 +186,7 @@ select test.expect(
 );
 
 select test.expect((select count(*) from public.clients) = 2, 'admin can read clients for oversight');
-select test.expect_error($$select public.create_package('X', 'c0000000-0000-0000-0000-000000000001',
-  'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
+select test.expect_error($$select public.create_package('X', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
   '00000000-0000-0000-0000-000000000001', now() + interval '1 day')$$, 'Only managers', 'admin cannot create packages');
 select test.expect_error('select public.clock_in()', 'Only managers and editors', 'admin does not clock in');
 
@@ -269,27 +267,41 @@ set local role authenticated;
 -- ── Manager creates and assigns a package ───────────────────────────────────
 
 select test.as_user('00000000-0000-0000-0000-000000000001');
-select test.expect_error($$select public.create_package('X', 'c0000000-0000-0000-0000-000000000001',
-  'd0000000-0000-0000-0000-000000000001', '', 'not-a-link', '{}', '', '00000000-0000-0000-0000-000000000011',
+
+-- Products: managers add them by name; they don't belong to a client.
+select set_config('test.product', public.create_product('  Brand Reels  ')::text, true);
+select test.expect(
+  (select name = 'Brand Reels' and client_id is null and created_by = '00000000-0000-0000-0000-000000000001'
+   from public.products where id = current_setting('test.product')::uuid),
+  'a manager adds a product with just a name'
+);
+select test.expect_error($$select public.create_product('brand reels')$$, 'already exists', 'product names are unique, ignoring case');
+select test.expect_error($$select public.create_product('   ')$$, 'Enter the product name', 'an empty product name is refused');
+select test.expect_error($$select public.create_product(repeat('x', 81))$$, 'under 80', 'a product name over 80 characters is refused');
+select test.expect_error($$insert into public.products (name) values ('Direct')$$, 'permission denied', 'products can''t be inserted directly');
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select test.expect_error($$select public.create_product('Editor Product')$$, 'Only managers', 'editors cannot add products');
+select test.as_user('00000000-0000-0000-0000-00000000000a');
+select test.expect_error($$select public.create_product('Admin Product')$$, 'Only managers', 'admins cannot add products');
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select test.expect_error($$select public.create_package('X', 'd0000000-0000-0000-0000-000000000001', '', 'not-a-link', '{}', '', '00000000-0000-0000-0000-000000000011',
   '00000000-0000-0000-0000-000000000001', now() + interval '1 day')$$, 'brief link', 'invalid brief link is rejected');
-select test.expect_error($$select public.create_package('X', 'c0000000-0000-0000-0000-000000000001',
-  'd0000000-0000-0000-0000-000000000002', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
-  '00000000-0000-0000-0000-000000000001', now() + interval '1 day')$$, 'belongs to this client', 'product from another client is rejected');
-select test.expect_error($$select public.create_package('X', 'c0000000-0000-0000-0000-000000000001',
-  'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000002',
+select test.expect_error($$select public.create_package('X', 'd0000000-0000-0000-0000-000000000099', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
+  '00000000-0000-0000-0000-000000000001', now() + interval '1 day')$$, 'Choose a product', 'an unknown product is rejected');
+select test.expect_error($$select public.create_package('X', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000002',
   '00000000-0000-0000-0000-000000000001', now() + interval '1 day')$$, 'active editor', 'a manager cannot be assigned as editor');
-select test.expect_error($$select public.create_package('X', 'c0000000-0000-0000-0000-000000000001',
-  'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
+select test.expect_error($$select public.create_package('X', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
   '00000000-0000-0000-0000-000000000001', now() - interval '1 hour')$$, 'future', 'past deadlines are rejected');
 
 select set_config('test.pkg', public.create_package(
-  '  Holiday Blend 30s Hero Spot ', 'c0000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001',
+  '  Holiday Blend 30s Hero Spot ', current_setting('test.product')::uuid,
   'Warm, cozy tone.', 'https://docs.google.com/document/d/brief', array[' https://vimeo.com/ref ', ''], '16:9 master',
   '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001', now() + interval '2 days'
 )::text, true);
 
 select test.expect(
   (select code = 'PKG-1001' and title = 'Holiday Blend 30s Hero Spot' and status = 'assigned' and reference_links = array['https://vimeo.com/ref']
+     and client_id is null
    from public.packages where id = current_setting('test.pkg')::uuid),
   'package is created as Assigned with a code and cleaned input'
 );
@@ -364,8 +376,7 @@ select test.expect(
 );
 select test.expect((select count(*) from public.notifications) = 0, 'a non-responsible manager got no submission notifications');
 select test.as_user('00000000-0000-0000-0000-000000000001');
-select test.expect_error($$select public.update_package(current_setting('test.pkg')::uuid, 'X', 'c0000000-0000-0000-0000-000000000001',
-  'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
+select test.expect_error($$select public.update_package(current_setting('test.pkg')::uuid, 'X', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
   '00000000-0000-0000-0000-000000000001', now() + interval '3 days')$$, 'Completed packages', 'completed packages cannot be edited');
 
 select test.as_user('00000000-0000-0000-0000-000000000011');
@@ -375,12 +386,11 @@ select test.expect((select count(*) from public.notifications where type = 'appr
 
 select test.as_user('00000000-0000-0000-0000-000000000001');
 select set_config('test.pkg2', public.create_package(
-  'Spin Class Teaser', 'c0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000002', '', '', '{}', '',
+  'Spin Class Teaser', 'd0000000-0000-0000-0000-000000000002', '', '', '{}', '',
   '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001', now() + interval '2 days'
 )::text, true);
 select public.update_package(
-  current_setting('test.pkg2')::uuid, 'Spin Class Teaser', 'c0000000-0000-0000-0000-000000000002',
-  'd0000000-0000-0000-0000-000000000002', 'New notes', '', '{}', '', '00000000-0000-0000-0000-000000000012',
+  current_setting('test.pkg2')::uuid, 'Spin Class Teaser', 'd0000000-0000-0000-0000-000000000002', 'New notes', '', '{}', '', '00000000-0000-0000-0000-000000000012',
   '00000000-0000-0000-0000-000000000002', now() + interval '4 days'
 );
 select test.expect(
@@ -421,7 +431,7 @@ select test.expect_error(format('select public.request_feedback(%L, %L)', curren
   'admin cannot request feedback');
 select test.expect_error(format('select public.approve_package(%L)', current_setting('test.pkg')), 'Only managers', 'admin cannot approve');
 select test.expect_error($$select public.update_package(current_setting('test.pkg2')::uuid, 'Spin Class Teaser',
-  'c0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000002', '', '', '{}', '',
+  'd0000000-0000-0000-0000-000000000002', '', '', '{}', '',
   '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000002', now() + interval '4 days')$$,
   'Only managers', 'admin cannot reassign or edit packages');
 select test.expect_error(format($$update public.packages set status = 'completed' where id = %L$$, current_setting('test.pkg2')),
@@ -432,8 +442,10 @@ select test.expect_error($$select public.change_staff_role('00000000-0000-0000-0
   'Reassign Jun Villanueva’s 1 open package', 'an editor with open packages keeps the editor role');
 select test.expect_error($$select public.change_staff_role('00000000-0000-0000-0000-000000000002', 'editor')$$,
   'Make another manager responsible', 'a manager responsible for open packages keeps the manager role');
-select test.expect_error($$select public.change_staff_role('00000000-0000-0000-0000-000000000001', 'editor')$$,
-  'assigned manager for 2 clients and products', 'a manager assigned to clients keeps the manager role');
+select public.change_staff_role('00000000-0000-0000-0000-000000000001', 'editor');
+select test.expect((select role = 'editor' from public.profiles where id = '00000000-0000-0000-0000-000000000001'),
+  'a manager without open packages can switch to editor (old client links don''t block it)');
+select public.change_staff_role('00000000-0000-0000-0000-000000000001', 'manager');
 
 -- ── Notifications stay private ──────────────────────────────────────────────
 

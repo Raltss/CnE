@@ -1,13 +1,14 @@
 import { ArrowLeft, Lock, Plus, SearchX, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import { AddProductDialog } from '../../components/domain/AddProductDialog'
 import { Callout } from '../../components/ui/Callout'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Field } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/Section'
 import { useToast } from '../../components/ui/toast-context'
 import { useAppState } from '../../data/hooks'
-import { defaultResponsibleManagerId, editors, managers } from '../../data/selectors'
+import { editors, managers } from '../../data/selectors'
 import { api } from '../../data/store'
 import type { AppState, PackageInput, WorkPackage } from '../../data/types'
 import { buttonClasses, cardClasses, cx, fieldAria, inputClasses } from '../../lib/styles'
@@ -16,7 +17,6 @@ import { useSession } from '../../session/context'
 
 interface FormValues {
   title: string
-  clientId: string
   productId: string
   description: string
   briefLink: string
@@ -27,11 +27,10 @@ interface FormValues {
   deadline: string // datetime-local value, Manila time
 }
 
-function initialValues(pkg: WorkPackage | null): FormValues {
+function initialValues(pkg: WorkPackage | null, meId: string): FormValues {
   if (pkg)
     return {
       title: pkg.title,
-      clientId: pkg.clientId,
       productId: pkg.productId,
       description: pkg.description,
       briefLink: pkg.briefLink,
@@ -45,14 +44,14 @@ function initialValues(pkg: WorkPackage | null): FormValues {
   const suggested = toManilaInputValue(new Date(Date.now() + 3 * DAY_MS).toISOString()).slice(0, 10) + 'T18:00'
   return {
     title: '',
-    clientId: '',
     productId: '',
     description: '',
     briefLink: '',
     referenceLinks: [''],
     deliverables: '',
     editorId: '',
-    responsibleManagerId: '',
+    // The manager creating the package is responsible until they pick someone else.
+    responsibleManagerId: meId,
     deadline: suggested,
   }
 }
@@ -60,7 +59,7 @@ function initialValues(pkg: WorkPackage | null): FormValues {
 const omit = (errors: Record<string, string>, ...keys: string[]) =>
   Object.fromEntries(Object.entries(errors).filter(([k]) => !keys.includes(k)))
 
-const FIELD_ORDER = ['title', 'clientId', 'productId', 'briefLink', 'referenceLinks', 'deliverables', 'editorId', 'responsibleManagerId', 'deadline']
+const FIELD_ORDER = ['title', 'productId', 'briefLink', 'referenceLinks', 'deliverables', 'editorId', 'responsibleManagerId', 'deadline']
 
 export function PackageFormPage() {
   const { id } = useParams()
@@ -87,26 +86,15 @@ function PackageForm({ state, pkg }: { state: AppState; pkg: WorkPackage | null 
   const { me } = useSession()
   const navigate = useNavigate()
   const toast = useToast()
-  const [values, setValues] = useState<FormValues>(() => initialValues(pkg))
+  const [values, setValues] = useState<FormValues>(() => initialValues(pkg, me.id))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  // Track whether the manager picked the responsible manager by hand.
-  const [managerTouched, setManagerTouched] = useState(Boolean(pkg))
-
-  const products = state.products.filter((p) => p.clientId === values.clientId)
+  // A new key per opening, so the Add product field starts empty.
+  const [addingProduct, setAddingProduct] = useState<number | null>(null)
   const set = <K extends keyof FormValues>(key: K, value: FormValues[K]) => {
     setValues((v) => ({ ...v, [key]: value }))
     if (errors[key]) setErrors((e) => omit(e, key))
-  }
-
-  const onProduct = (productId: string) => {
-    setValues((v) => ({
-      ...v,
-      productId,
-      responsibleManagerId: managerTouched ? v.responsibleManagerId : (defaultResponsibleManagerId(state, productId) ?? v.responsibleManagerId),
-    }))
-    setErrors((e) => omit(e, 'productId', 'responsibleManagerId'))
   }
 
   const setRef = (index: number, value: string) => {
@@ -178,42 +166,38 @@ function PackageForm({ state, pkg }: { state: AppState; pkg: WorkPackage | null 
               autoComplete="off"
             />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="pkg-clientId" label="Client" required error={err('clientId')}>
+          <Field
+            id="pkg-productId"
+            label="Product"
+            required
+            error={err('productId')}
+            hint={state.products.length ? undefined : 'No products yet. Add the first one.'}
+          >
+            <div className="flex flex-col gap-2 sm:flex-row">
               <select
-                {...fieldAria('pkg-clientId', { error: err('clientId') })}
-                value={values.clientId}
-                onChange={(e) => {
-                  set('clientId', e.target.value)
-                  setValues((v) => ({ ...v, productId: '' }))
-                }}
-                className={inputClasses(Boolean(err('clientId')))}
-              >
-                <option value="">Choose a client</option>
-                {state.clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field id="pkg-productId" label="Product" required error={err('productId')} hint={!values.clientId ? 'Choose a client first.' : undefined}>
-              <select
-                {...fieldAria('pkg-productId', { error: err('productId'), hasHint: !values.clientId })}
+                {...fieldAria('pkg-productId', { error: err('productId'), hasHint: !state.products.length })}
                 value={values.productId}
-                onChange={(e) => onProduct(e.target.value)}
-                disabled={!values.clientId}
+                onChange={(e) => set('productId', e.target.value)}
                 className={inputClasses(Boolean(err('productId')))}
               >
                 <option value="">Choose a product</option>
-                {products.map((p) => (
+                {state.products.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
                 ))}
               </select>
-            </Field>
-          </div>
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                className={buttonClasses('secondary', 'md', 'shrink-0')}
+                onClick={() => setAddingProduct(Date.now())}
+              >
+                <Plus aria-hidden className="size-4" />
+                New product
+              </button>
+            </div>
+          </Field>
           <Field id="pkg-description" label="Description / notes">
             <textarea
               id="pkg-description"
@@ -329,15 +313,12 @@ function PackageForm({ state, pkg }: { state: AppState; pkg: WorkPackage | null 
               label="Responsible manager"
               required
               error={err('responsibleManagerId')}
-              hint="Defaults to the product’s manager (or the client’s). Gets notified on submissions."
+              hint="Starts as you; change it if another manager should handle reviews. Gets notified on submissions."
             >
               <select
                 {...fieldAria('pkg-responsibleManagerId', { error: err('responsibleManagerId'), hasHint: true })}
                 value={values.responsibleManagerId}
-                onChange={(e) => {
-                  setManagerTouched(true)
-                  set('responsibleManagerId', e.target.value)
-                }}
+                onChange={(e) => set('responsibleManagerId', e.target.value)}
                 className={inputClasses(Boolean(err('responsibleManagerId')))}
               >
                 <option value="">Choose a manager</option>
@@ -369,6 +350,10 @@ function PackageForm({ state, pkg }: { state: AppState; pkg: WorkPackage | null 
           </button>
         </div>
       </form>
+
+      {addingProduct !== null && (
+        <AddProductDialog key={addingProduct} open onClose={() => setAddingProduct(null)} onAdded={(product) => set('productId', product.id)} />
+      )}
     </>
   )
 }

@@ -81,6 +81,7 @@ export function createDemoBackend(): DemoBackend {
     api: {
       createPackage: (actorId, input) => run<WorkPackage>((d, at) => wf.createPackage(d, actorId, input, at)),
       updatePackage: (actorId, packageId, input) => run<WorkPackage>((d, at) => wf.updatePackage(d, actorId, packageId, input, at)),
+      createProduct: (actorId, name) => run((d) => wf.createProduct(d, actorId, name)),
       startWork: (actorId, packageId) => run((d, at) => wf.startWork(d, actorId, packageId, at)),
       submitForReview: (actorId, packageId, input) => run((d, at) => wf.submitForReview(d, actorId, packageId, input, at)),
       requestFeedback: (actorId, packageId, note) => run((d, at) => wf.requestFeedback(d, actorId, packageId, note, at)),

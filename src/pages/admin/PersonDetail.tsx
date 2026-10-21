@@ -194,13 +194,13 @@ function PackagesTab({ state, person, params, set, now }: TabProps) {
   const created = !isEditor && params.get('relation') === 'created'
   const filters: PackageFilters = {
     ...EMPTY_FILTERS,
-    client: params.get('client') ?? '',
+    product: params.get('product') ?? '',
     status: (params.get('status') ?? '') as PackageFilters['status'],
     due: (params.get('due') ?? '') as PackageFilters['due'],
     ...(isEditor ? { editor: person.id } : created ? {} : { manager: person.id }),
   }
   const results = filterPackages(state, filters, now).filter((p) => !created || p.createdById === person.id)
-  const filtered = ['relation', 'client', 'status', 'due'].some((k) => params.get(k))
+  const filtered = ['relation', 'product', 'status', 'due'].some((k) => params.get(k))
 
   return (
     <>
@@ -229,12 +229,12 @@ function PackagesTab({ state, person, params, set, now }: TabProps) {
           all="Any status"
         />
         <FilterSelect
-          id={`${uid}-client`}
-          label="Client"
-          value={filters.client}
-          onChange={(v) => set('client', v)}
-          options={state.clients.map((c) => ({ value: c.id, label: c.name }))}
-          all="All clients"
+          id={`${uid}-product`}
+          label="Product"
+          value={filters.product}
+          onChange={(v) => set('product', v)}
+          options={state.products.map((p) => ({ value: p.id, label: p.name }))}
+          all="All products"
         />
         <FilterSelect
           id={`${uid}-due`}
@@ -262,13 +262,13 @@ function PackagesTab({ state, person, params, set, now }: TabProps) {
             caption={`${person.name}’s packages`}
             columns={
               isEditor
-                ? ['package', 'clientProduct', 'manager', 'status', 'deadline', 'round']
-                : ['package', 'clientProduct', 'editor', 'status', 'deadline', 'round']
+                ? ['package', 'product', 'manager', 'status', 'deadline', 'round']
+                : ['package', 'product', 'editor', 'status', 'deadline', 'round']
             }
           />
         ) : (
           <EmptyState icon={FolderSearch} title={filtered ? 'No packages match these filters' : 'No packages yet'} compact>
-            {filtered ? 'Try another status, client, or deadline.' : `Packages ${isEditor ? 'assigned to' : 'handled by'} ${person.name} will show up here.`}
+            {filtered ? 'Try another status, product, or deadline.' : `Packages ${isEditor ? 'assigned to' : 'handled by'} ${person.name} will show up here.`}
           </EmptyState>
         )}
       </Section>

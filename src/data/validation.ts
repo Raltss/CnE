@@ -23,11 +23,7 @@ export function validatePackageInput(
   if (!title) errors.title = 'Title is required.'
   else if (title.length > 120) errors.title = 'Keep the title under 120 characters.'
 
-  const client = state.clients.find((c) => c.id === input.clientId)
-  if (!client) errors.clientId = 'Choose a client.'
-  const product = state.products.find((p) => p.id === input.productId)
-  if (!product) errors.productId = 'Choose a product.'
-  else if (client && product.clientId !== client.id) errors.productId = 'This product belongs to another client.'
+  if (!state.products.some((p) => p.id === input.productId)) errors.productId = 'Choose a product.'
 
   if (input.briefLink.trim() && !isHttpUrl(input.briefLink.trim())) errors.briefLink = URL_HINT
   input.referenceLinks.forEach((link, index) => {
@@ -57,6 +53,17 @@ export function validateSubmissionInput(input: SubmissionInput): FieldErrors<key
   if (review && !isHttpUrl(review)) errors.reviewLink = URL_HINT
   if (delivery && !isHttpUrl(delivery)) errors.deliveryLink = URL_HINT
   return errors
+}
+
+// ── Products ────────────────────────────────────────────────────────────────
+
+/** Same rules as public.create_product(): a name of up to 80 characters, unique ignoring case. */
+export function validateProductName(state: AppState, name: string): string | undefined {
+  const clean = name.trim()
+  if (!clean) return 'Enter the product name.'
+  if (clean.length > 80) return 'Keep the product name under 80 characters.'
+  if (state.products.some((p) => p.name.trim().toLowerCase() === clean.toLowerCase())) return `A product called “${clean}” already exists.`
+  return undefined
 }
 
 // ── Accounts and passwords ──────────────────────────────────────────────────

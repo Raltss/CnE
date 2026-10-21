@@ -56,7 +56,7 @@ export function MyWork() {
                 packages={others}
                 now={now}
                 caption="My packages"
-                columns={['package', 'clientProduct', 'status', 'deadline', 'round']}
+                columns={['package', 'product', 'status', 'deadline', 'round']}
                 action={(pkg) => <EditorPackageAction pkg={pkg} editorId={me.id} />}
               />
             ) : (
@@ -76,7 +76,7 @@ export function MyWork() {
             }
           >
             {recent.length ? (
-              <PackageTable state={state} packages={recent} now={now} caption="Recently completed" columns={['package', 'clientProduct', 'status', 'round']} />
+              <PackageTable state={state} packages={recent} now={now} caption="Recently completed" columns={['package', 'product', 'status', 'round']} />
             ) : (
               <EmptyState icon={CircleCheck} title="No completed work yet" compact />
             )}

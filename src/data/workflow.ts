@@ -14,6 +14,7 @@ import type {
   NotificationType,
   PackageInput,
   PackageStatus,
+  Product,
   Role,
   StaffAccount,
   StaffAccountInput,
@@ -21,7 +22,7 @@ import type {
   SubmissionInput,
   WorkPackage,
 } from './types'
-import { validatePackageInput, validateStaffAccountInput, validateSubmissionInput } from './validation'
+import { validatePackageInput, validateProductName, validateStaffAccountInput, validateSubmissionInput } from './validation'
 
 export const AUTO_CLOSE_HOURS = 16
 
@@ -138,7 +139,7 @@ export function updatePackage(
 
   const changed: string[] = []
   if (input.title !== before.title) changed.push('title')
-  if (input.clientId !== before.clientId || input.productId !== before.productId) changed.push('client/product')
+  if (input.productId !== before.productId) changed.push('product')
   if (input.description !== before.description) changed.push('description')
   if (input.briefLink !== before.briefLink) changed.push('brief link')
   if (input.referenceLinks.join('\n') !== before.referenceLinks.join('\n')) changed.push('reference links')
@@ -281,6 +282,18 @@ export function approvePackage(s: DemoState, actorId: string, packageId: string,
   return ok(pkg)
 }
 
+// ── Products ────────────────────────────────────────────────────────────────
+
+/** Mirrors public.create_product(): managers add a product by name. */
+export function createProduct(s: DemoState, actorId: string, name: string): ActionResult<Product> {
+  if (!requireRole(s, actorId, 'manager')) return fail('Only managers can add products.')
+  const error = validateProductName(s, name)
+  if (error) return fail(error, { name: error })
+  const product: Product = { id: newId('prd'), name: name.trim() }
+  s.products.push(product)
+  return ok(product)
+}
+
 // ── Attendance ──────────────────────────────────────────────────────────────
 
 export function openSession(s: AppState, personId: string) {
@@ -411,11 +424,6 @@ export function roleChangeBlocker(s: AppState, account: StaffAccount): string | 
   if (open > 0 && account.role === 'editor')
     return `Reassign ${account.name}’s ${plural(open, 'open package', 'open packages')} to another editor first.`
   if (open > 0) return `Make another manager responsible for ${account.name}’s ${plural(open, 'open package', 'open packages')} first.`
-  if (account.role === 'manager') {
-    const owned = s.clients.filter((c) => c.managerId === account.id).length + s.products.filter((p) => p.managerId === account.id).length
-    if (owned > 0)
-      return `${account.name} is the assigned manager for ${plural(owned, 'client or product', 'clients and products')}. Assign another manager to them first.`
-  }
   return null
 }
 

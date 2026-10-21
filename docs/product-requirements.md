@@ -24,7 +24,7 @@ Do not change the stack without explicit approval.
 - **Admin** is a **separate person** who manages staff accounts and roles, and **oversees all work read-only** (packages, review queues, submission rounds, deadlines, completed work, and attendance). The admin does not create, edit, review, or submit packages, and does not clock in. *(Read-only oversight added 2026-10-21.)*
 - **Viewing is not acting.** The admin always uses their own session; there's no "sign in as" or impersonation. Oversight screens are labeled **View only**. Every admin change to an account is recorded in the account history under that admin.
 - **Managers:** both managers manage the same pool of editors and can oversee all work.
-- **Clients/products** have assigned managers. Each **package** has one **responsible manager**.
+- **Products** group packages; managers add them by name. Each **package** has one **responsible manager**. *(Clients were removed 2026-10-21.)*
 - **Editors:** see their assigned work and their own work history. They cannot see other editors' packages.
 
 ### Accounts
@@ -48,7 +48,7 @@ Do not change the stack without explicit approval.
 | Change own password | ✅ | ✅ | ✅ |
 | Grant or remove admin access | SQL editor only | — | — |
 | View the account history | ✅ | — | — |
-| Manage clients and products | — | ✅ | — |
+| Add products (name only) | — | ✅ | — |
 | Create, edit, assign, reassign packages | — | ✅ | — |
 | Change responsible manager / deadline | — | ✅ | — |
 | Hold, resume, cancel, archive, reopen packages | — | ✅ | — |
@@ -63,9 +63,13 @@ Do not change the stack without explicit approval.
 
 ## 3. Work organization
 
-**Client → Product → Package**
+**Product → Package** *(changed 2026-10-21: there are no clients any more)*
+
+A **product** has just a **name** (up to 80 characters, unique ignoring case). Managers add products in the app: **Packages → Add product**, or **New product** inside the package form.
 
 A **package** is the unit of work assigned to one editor. Fields:
+
+- Product
 
 - Title
 - Description / notes
@@ -78,7 +82,7 @@ A **package** is the unit of work assigned to one editor. Fields:
 
 Rules:
 
-- **Responsible manager (Default):** it starts as the product's assigned manager, or the client's if the product has none. Managers can change it at any time, and the change is recorded in the activity history.
+- **Responsible manager:** it starts as the manager who creates the package *(changed 2026-10-21; it used to come from the product's or client's manager)*. Managers can change it at any time, and the change is recorded in the activity history.
 - **Reassignment:** managers can move a package to another editor. **Both** the previous and the new editor are notified. Earlier submission rounds stay on the package.
 - **Deadline changes:** managers can change the deadline. **(Default)** Each change records the old value, the new value, who made it, and when, and notifies the editor.
 
@@ -174,7 +178,7 @@ Completed or Cancelled ──(manager: archive)──▶ Archived ──(manager
 - Packages awaiting review
 - Active assignments and editor workload (**workload = count of active packages per editor**: Assigned, In Progress, Submitted, Apply Feedback; On Hold shown separately)
 - Upcoming deadlines and overdue packages
-- Filters by client, product, editor, and status
+- Filters by product, editor, and status
 - Access to staff attendance and personal clock-in/out
 
 ### Admin overview (added 2026-10-21)
@@ -211,7 +215,7 @@ Answers to the open planning questions.
 | # | Topic | Decision |
 |---|---|---|
 | 1 | Admin role | Separate person; manages staff access. **Updated 2026-10-21:** also oversees all work read-only, without impersonation |
-| 2 | Responsible manager | Can change after assignment. Defaults to the product's (or client's) manager **(Default)** |
+| 2 | Responsible manager | Can change after assignment. Defaults to the manager creating the package (changed 2026-10-21) |
 | 3 | Assignment | One editor per package; reassignment allowed; both editors notified |
 | 4 | Deliverables | Free text for now |
 | 5 | Submission shape | One review + one delivery link per round; delivery link not required on every submit; required to approve **(Default)** |
@@ -227,6 +231,7 @@ Answers to the open planning questions.
 | 15 | First accounts | Created in the Supabase Dashboard; roles assigned by a trusted admin in the SQL editor. Invite Edge Function later (2026-10-21) |
 | 16 | Admin actions | In the app, admins approve accounts, switch manager ↔ editor, and deactivate/reactivate, through audited database functions. Admin access stays SQL-only. Package and attendance views are read-only (2026-10-21) |
 | 17 | Adding people | Admin **Add user** form with a temporary password and no email; the person must choose their own password at first sign-in; everyone can change theirs on the Account page (2026-10-21) |
+| 18 | Products, no clients | Work is Product → Package. Managers add products by name; clients are no longer used (existing client data is kept in the database). The responsible manager starts as the package's creator (2026-10-21) |
 
 ## 11. Interface proposal (approved)
 
@@ -238,7 +243,7 @@ Minimalism / Swiss: dense, grid-based, high contrast, functional. Light theme by
 ### Navigation (role-based)
 - **Desktop ≥1024px:** collapsible left sidebar, plus a top bar with global search, a **clock-in/out pill** (live Manila time and session duration), a notifications bell with unread count, and a user menu.
 - **Tablet:** the sidebar collapses to an icon rail. **Mobile <768px:** bottom tab bar (≤5 items) with "More"; the clock pill stays in the top bar.
-- **Manager:** Dashboard · Review Queue · Deadlines · Packages · Time Clock · Clients & Products · Editors · Attendance · Notifications. *(Deadlines and Time Clock added 2026-10-21 at the user's request, to take upcoming/overdue work and clock-in/out off the dashboard.)*
+- **Manager:** Dashboard · Review Queue · Deadlines · Packages · Time Clock · Editors · Attendance · Notifications. Products are added from Packages (no separate Clients & Products page; clients removed 2026-10-21). *(Deadlines and Time Clock added 2026-10-21 at the user's request, to take upcoming/overdue work and clock-in/out off the dashboard.)*
 - **Editor:** My Work · Needs Changes · History · Attendance · Notifications
 - **Admin:** Overview · Team · Packages · Attendance · Staff & Roles. No clock pill and no notifications. *(Revised 2026-10-21 for read-only oversight; see `design-system/cne/pages/admin.md`.)*
 - **Everyone:** **Your account** (profile and Change password), linked from the sidebar footer, or by tapping your name in the top bar on small screens.
@@ -258,7 +263,7 @@ Minimalism / Swiss: dense, grid-based, high contrast, functional. Light theme by
 │         │ submitted-at·[Open] [Approve]  │                          │
 │         ├────────────────────────────────┼─────────────────────────┤
 │         │ Active assignments             │ Editor workload          │
-│         │ filters: client·product·       │ bar per editor: active   │
+│         │ filters: product·              │ bar per editor: active   │
 │         │ editor·status·manager          │ count, due-soon, on hold │
 │         └────────────────────────────────┴─────────────────────────┘
 ```
@@ -268,13 +273,13 @@ Attendance page: "who's clocked in now", a date-range table with Auto-closed fla
 ```
 KPIs: Assigned 3 | Needs changes 1 | Due this week 2
 [Needs Changes]       cards first, showing the manager's note if any
-[My Packages]         title · client/product · status · deadline countdown · primary action (Start / Submit)
+[My Packages]         title · product · status · deadline countdown · primary action (Start / Submit)
 [Recently Completed]  last 5 → "View history"
 Right rail (desktop) / section (mobile): my attendance this week, clock button, "Request correction"
 ```
 
 ### Package detail (shared)
-- **Header:** breadcrumb Client › Product › Package, status badge, deadline (with the overdue flag), editor, responsible manager.
+- **Header:** breadcrumb Product › Package, status badge, deadline (with the overdue flag), editor, responsible manager.
 - **Labeled link groups** with icons: Brief, References (list), and the latest round's Review and Delivery links.
 - **Deliverables:** free text.
 - **Role-aware action bar:** Start / Submit / Approve / Apply Feedback / Hold / Resume / Cancel / Archive / Reopen / Reassign.
@@ -331,9 +336,9 @@ Milestone 1, the **frontend prototype**, is done (see [`prototype-notes.md`](pro
 | Requirements and decisions | ✅ Agreed (this document) |
 | Design system | ✅ Saved to `design-system/cne/MASTER.md` |
 | UI dependencies | ✅ Tailwind CSS v4, lucide-react, react-router installed. shadcn/ui and TanStack Query not needed yet |
-| Supabase client, schema, RLS | 🟡 5 migrations, RLS on every table, workflow and staff functions, about 100 SQL security checks passing (plain Postgres 16 + Supabase stub), plus an end-to-end browser run against real Postgres + PostgREST. The admin-oversight migration isn't applied to `cne-dev` yet |
+| Supabase client, schema, RLS | 🟡 7 migrations, RLS on every table, workflow, staff and product functions, about 125 SQL security checks passing (plain Postgres 16 + Supabase stub), plus an end-to-end browser run against real Postgres + PostgREST. The admin-oversight migration isn't applied to `cne-dev` yet |
 | Auth, accounts, roles | 🟡 Email/password sign-in, session restore, sign-out, approval gate, roles enforced in the database. Admin **Add user** (Edge Function, temporary password), forced first password change, Account page with Change password. Function not deployed yet. Password reset by email and Google OAuth not started |
-| Clients / products / packages | 🟡 Create, edit, reassign, filters, on Supabase (`create_package`/`update_package`). Clients/products come from `supabase/scripts/sample-clients.sql`; no management UI |
+| Products / packages | 🟡 Add product (name only), create, edit, reassign, filters, on Supabase (`create_product`, `create_package`, `update_package`). No clients |
 | Package workflow (main statuses) | 🟡 Assigned → In Progress → Submitted → Apply Feedback / Completed, enforced by database functions |
 | On Hold / Cancelled / Archived / Reopen | Not started |
 | Submissions and history | 🟡 One row per round (never overwritten), review and delivery links, optional feedback note, activity log |

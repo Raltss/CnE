@@ -21,7 +21,7 @@ export function FeedbackCard({ state, pkg, now }: { state: AppState; pkg: WorkPa
             </Link>
           </h3>
           <p className="text-xs text-muted-fg">
-            {lookup.clientName(pkg.clientId)} · {lookup.productName(pkg.productId)} · Round {sub?.round ?? '?'}
+            {lookup.productName(pkg.productId)} · Round {sub?.round ?? '?'}
           </p>
         </div>
         <StatusBadge status={pkg.status} />

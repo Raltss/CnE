@@ -29,18 +29,9 @@ export interface StaffAccount {
   mustChangePassword: boolean
 }
 
-export interface Client {
-  id: string
-  name: string
-  managerId: string
-}
-
 export interface Product {
   id: string
-  clientId: string
   name: string
-  /** Null means the product falls back to the client's manager. */
-  managerId: string | null
 }
 
 /**
@@ -62,7 +53,6 @@ export interface WorkPackage {
   /** Human-friendly reference shown in tables, e.g. PKG-1042. */
   code: string
   title: string
-  clientId: string
   productId: string
   description: string
   briefLink: string
@@ -167,7 +157,6 @@ export interface AppNotification {
 export interface AppState {
   people: Person[]
   accounts: StaffAccount[]
-  clients: Client[]
   products: Product[]
   packages: WorkPackage[]
   submissions: Submission[]
@@ -187,7 +176,6 @@ export interface DemoState extends AppState {
 
 export interface PackageInput {
   title: string
-  clientId: string
   productId: string
   description: string
   briefLink: string
