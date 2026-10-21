@@ -55,7 +55,7 @@ export function ReviewQueue() {
             packages={items}
             now={now}
             caption="Submitted packages awaiting review"
-            columns={['package', 'clientProduct', 'editor', 'manager', 'round', 'submitted', 'deadline']}
+            columns={['package', 'product', 'editor', 'manager', 'round', 'submitted', 'deadline']}
             action={(pkg) => (
               <Link to={`/packages/${pkg.id}`} className={buttonClasses('primary', 'sm')}>
                 Review

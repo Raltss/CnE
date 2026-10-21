@@ -8,7 +8,7 @@ This guide describes the code as it is today, not as the PRD plans it. Where the
 
 ## 1. Overview
 
-CnE helps a video editing agency track work. A **package** is one piece of work (for example, "30s hero spot") that belongs to a **client** and a **product**, and is assigned to one **editor**.
+CnE helps a video editing agency track work. A **package** is one piece of work (for example, "30s hero spot") that belongs to a **product** (for example, "Kapeng Barako Social Shorts"), and is assigned to one **editor**.
 
 The app has four layers. Each one only talks to the layer below it:
 
@@ -19,7 +19,7 @@ The app has four layers. Each one only talks to the layer below it:
 | **Data access** | One way to read (`useAppState`) and one way to write (`api`) | `src/data/hooks.ts`, `src/data/store.ts` |
 | **Backend** | Supabase (default) or the localStorage demo | `src/data/supabaseBackend.ts` + `supabase/migrations/`, or `src/data/demoBackend.ts` + `src/data/workflow.ts` |
 
-All the data a person can see is loaded into **one JavaScript object** called `AppState` (defined in `src/data/types.ts`): people, clients, products, packages, submission rounds, activity, attendance sessions, notifications, and (admins only) the account history. With Supabase it's filled from database tables, and the database only returns the rows that person may read. In the demo it's saved to `localStorage` under `cne.demo.state`.
+All the data a person can see is loaded into **one JavaScript object** called `AppState` (defined in `src/data/types.ts`): people, products, packages, submission rounds, activity, attendance sessions, notifications, and (admins only) the account history. With Supabase it's filled from database tables, and the database only returns the rows that person may read. In the demo it's saved to `localStorage` under `cne.demo.state`.
 
 **Signing in:** with Supabase, the app shows a sign-in page (email + password, no sign-up). A new account can't see anything until an admin approves it and gives it a role. Admins see everyone's work **read-only** (an "Overview" and a page per manager and editor) and change only account access. In the demo, a **"Demo account" dropdown** in a yellow bar replaces sign-in; it isn't security.
 
@@ -141,6 +141,7 @@ In the demo, `api` comes from `demoBackend.ts` instead: it runs the same rules f
 | | [`src/layout/DemoBar.tsx`](../src/layout/DemoBar.tsx) | Demo only: yellow bar with the demo account switcher and "Reset demo data". |
 | | [`src/pages/RoleGuard.tsx`](../src/pages/RoleGuard.tsx) | Shows a "this page is for managers/editors" message when the wrong role opens a page. A convenience: the database enforces the real rules. |
 | **Create / edit packages** | [`src/pages/manager/PackageForm.tsx`](../src/pages/manager/PackageForm.tsx) | The new/edit package form; calls `api.createPackage` or `api.updatePackage`. |
+| | [`src/components/domain/AddProductDialog.tsx`](../src/components/domain/AddProductDialog.tsx) | **Add product** (name only), from the Packages page or "New product" in the form; calls `api.createProduct`. |
 | | [`src/pages/manager/PackagesList.tsx`](../src/pages/manager/PackagesList.tsx) | All packages with search and filters stored in the URL. |
 | **Package detail and review** | [`src/pages/PackageDetail.tsx`](../src/pages/PackageDetail.tsx) | Shows one package and the right action panel for the role (Start, Submit, Approve, Apply Feedback). |
 | | [`src/components/domain/SubmissionForm.tsx`](../src/components/domain/SubmissionForm.tsx) | The editor's review/delivery link form. |
@@ -149,7 +150,7 @@ In the demo, `api` comes from `demoBackend.ts` instead: it runs the same rules f
 | | [`src/components/domain/LinkField.tsx`](../src/components/domain/LinkField.tsx) | A labeled external link with open and copy buttons. |
 | **Manager dashboard** | [`src/pages/manager/Dashboard.tsx`](../src/pages/manager/Dashboard.tsx) | 4 clickable tiles, "Needs your review", and "Team workload"; tiles and editor rows open dialogs with details. |
 | | [`src/components/domain/ReviewDialog.tsx`](../src/components/domain/ReviewDialog.tsx) | Quick-review dialog: shows the latest round's links and lets a manager approve or mark Apply Feedback without leaving the dashboard. |
-| | [`src/components/domain/PackageList.tsx`](../src/components/domain/PackageList.tsx) | Roomy package rows (title, client, editor, status, deadline) used in dialogs and on Deadlines. |
+| | [`src/components/domain/PackageList.tsx`](../src/components/domain/PackageList.tsx) | Roomy package rows (title, product, editor, status, deadline) used in dialogs and on Deadlines. |
 | | [`src/pages/manager/Deadlines.tsx`](../src/pages/manager/Deadlines.tsx) | Overdue, due in 48 hours, and later this week, in three groups. |
 | | [`src/pages/manager/ReviewQueue.tsx`](../src/pages/manager/ReviewQueue.tsx) | Full list of submitted packages with an "I'm responsible" filter. |
 | | [`src/pages/manager/reviewQueue.ts`](../src/pages/manager/reviewQueue.ts) | Sorts submitted packages: yours first, then oldest submission first. |
@@ -280,7 +281,7 @@ The demo's data exists only in that browser, its "permissions" can be bypassed b
 | On Hold, Resume, Cancel, Archive, Unarchive | ❌ The statuses exist in the types and the database enum, but nothing moves a package to them |
 | Reopen a Completed package | ❌ Completed packages can't be edited |
 | Attendance correction requests, approvals, direct corrections, audit history | ❌ The Attendance page shows a "later milestone" note |
-| Clients & Products and Editors management screens | ❌ Add clients and products with `supabase/scripts/sample-clients.sql` |
+| Renaming/removing products, Editors management screen | ❌ Products can only be added (Packages → Add product). Clients were removed on purpose (2026-10-21) |
 | Scheduled 16-hour auto-close | ⚠️ Runs on every clock action and every minute while someone has the app open; `pg_cron` is still a proposal |
 | Global search box and user menu in the top bar | ❌ Search exists only on the Packages page filters |
 | Email notifications, deadline reminders | ❌ Out of scope for v1 / proposal |
@@ -319,7 +320,7 @@ You start as **Andrea Santos (Manager)**. Switch people with the **Demo account*
 1. As **Andrea Santos**, go to **Packages → New package**.
 2. Fill in:
    - **Title:** `My test reel`
-   - **Client:** Kapeng Barako Co. → **Product:** Seasonal Campaigns (notice that **Responsible manager** fills in as Andrea automatically)
+   - **Product:** Kapeng Barako Seasonal Campaigns, or click **New product** to add one by name (notice that **Responsible manager** is already you, Andrea)
    - **Assigned editor:** Bea Lim
    - **Final deadline:** any time tomorrow
 3. Try clicking **Create and assign** with the title empty first: you'll see an inline error. Then fill it in and save.

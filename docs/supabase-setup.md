@@ -43,11 +43,12 @@ The migrations are in `supabase/migrations/`:
 | File | What it creates |
 |---|---|
 | `20261021100000_staff_access.sql` | `profiles`, roles (`admin`/`manager`/`editor`), access helpers, the "new user → inactive profile" trigger, the self-role-change guard, and the SQL-editor setup functions |
-| `20261021100100_work_tables.sql` | clients, products, packages, submissions, activity, attendance, notifications, and their read policies (RLS) |
+| `20261021100100_work_tables.sql` | clients (unused since 140000), products, packages, submissions, activity, attendance, notifications, and their read policies (RLS) |
 | `20261021100200_workflow_functions.sql` | the workflow commands (`create_package`, `submit_for_review`, `approve_package`, `clock_in`, …) |
 | `20261021100300_realtime.sql` | adds the live tables to Realtime |
 | `20261021120000_admin_oversight.sql` | admin **read-only** access to all work, the account history (`staff_activity`, filled by a trigger), and the audited staff functions (`approve_account`, `change_staff_role`, `deactivate_account`, `reactivate_account`). Removes direct profile updates through the API |
 | `20261021130000_staff_accounts.sql` | accounts added in the app: the "choose your own password" flag (`must_change_password`), the job title from the new account's details, history attribution to the admin who added them, and `complete_password_change()` |
+| `20261021140000_products_without_clients.sql` | products without clients: `create_product(name)` for managers, package functions without a client, and the old client data kept but unused |
 
 From the project folder:
 
@@ -57,7 +58,7 @@ npx supabase db push --dry-run     # shows what would run
 npx supabase db push               # applies it to cne-dev
 ```
 
-- The dry run lists only the files that aren't applied yet. If the first four are already applied, that's `20261021120000_admin_oversight.sql` and `20261021130000_staff_accounts.sql`. If it lists anything else, or reports tables that already exist, stop and review before pushing.
+- The dry run lists only the files that aren't applied yet. If the first four are already applied, that's `20261021120000_admin_oversight.sql`, `20261021130000_staff_accounts.sql`, and `20261021140000_products_without_clients.sql`. If it lists anything else, or reports tables that already exist, stop and review before pushing.
 - These migrations don't change or delete existing accounts, packages, rounds, or attendance. They add policies, the `staff_activity` table, the `must_change_password` column, triggers, and functions, and start each existing account's history with an "Account history started" entry.
 - **Apply them before using the updated app.** It loads `staff_activity` and `must_change_password`, and shows "Couldn't load your account" or "Couldn't load your work" until they exist.
 
@@ -116,7 +117,7 @@ The account history records "Account created" and "Approved as …" under your n
 
   The app doesn't edit names and titles yet. Calling `approve_staff` again with the same role is the way to change them.
 
-**Manage access** on an approved account switches between manager and editor (refused while they still hold open packages or are a client's assigned manager), and deactivates or reactivates the account.
+**Manage access** on an approved account switches between manager and editor (refused while they still hold open packages), and deactivates or reactivates the account.
 
 ### Check the result
 
@@ -140,9 +141,11 @@ You type the emails and passwords yourself; nothing is stored in the repo.
 2. **Add another**: add the editor (role **Editor**) and copy that password too.
 3. Sign in as each one (a private window helps) and choose a real password when asked.
 
-## 8. Add starter clients and products
+## 8. Add products
 
-There's no client/product screen yet. Open `supabase/scripts/sample-clients.sql`, change the two manager emails at the top (use the same email twice if you have one manager), paste it into the SQL editor, and run it. It adds 2 clients and 4 products. Running it again does nothing.
+Packages belong to a **product** (there are no clients). As a manager: **Packages → Add product**, type the name, and add it. You can also click **New product** next to the Product field while creating a package; the new product is selected for you.
+
+Optional: `supabase/scripts/sample-products.sql` adds four starter products from the SQL editor (it skips names that already exist).
 
 ## 9. Try it
 
@@ -152,7 +155,7 @@ npm run dev     # http://localhost:5173
 
 Use a normal window for one person and a private window (or another browser) for the next.
 
-1. **Manager:** sign in → **Packages → New package**, pick a client and product, assign your **test editor**, set a deadline, **Create and assign**. Reload: it's still there.
+1. **Manager:** sign in → **Packages → New package**, pick a product (or add one with **New product**), assign your **test editor**, set a deadline, **Create and assign**. Reload: it's still there.
 2. **Editor:** sign in → the assignment is on **My Work** and in the bell. Open it → **Start work** → paste a review link → **Submit for review**.
 3. **Manager:** open the package (it's in **Review Queue**) → **Apply Feedback**, add a short note → **Send back for changes**.
 4. **Editor:** the package is under **Needs Changes** with the note → add a review link and a **delivery link** → **Resubmit for review** (Round 2).
@@ -163,7 +166,7 @@ Use a normal window for one person and a private window (or another browser) for
 
 ## 10. Check the security rules yourself (optional)
 
-`supabase/sql-tests/security_and_workflow.test.sql` signs in as each role and checks about 115 rules: RLS isolation, admin read-only oversight, the audited staff functions, accounts added in the app, password-change records, no self-promotion, no direct writes, the workflow, attendance, and notifications. It runs in a transaction that's rolled back, so it leaves no data behind. See [`supabase/sql-tests/README.md`](../supabase/sql-tests/README.md).
+`supabase/sql-tests/security_and_workflow.test.sql` signs in as each role and checks about 125 rules: RLS isolation, admin read-only oversight, the audited staff functions, accounts added in the app, password-change records, no self-promotion, no direct writes, the workflow, attendance, and notifications. It runs in a transaction that's rolled back, so it leaves no data behind. See [`supabase/sql-tests/README.md`](../supabase/sql-tests/README.md).
 
 ## Troubleshooting
 
@@ -178,9 +181,10 @@ Use a normal window for one person and a private window (or another browser) for
 | "Couldn't load your work" / `relation "public.packages" does not exist` | The migrations haven't been applied (step 3) |
 | Add user: "Couldn't reach the Add user function" | Deploy it (step 4) |
 | Add user: "An account with this email already exists." | Someone already signs in with that email; find them in the list (they may be waiting for approval or deactivated) |
-| "Can't change the role yet" in Staff & Roles | The person still holds open packages (or is a client's or product's manager). A manager reassigns them first |
+| "Can't change the role yet" in Staff & Roles | The person still holds open packages. A manager reassigns them first |
 | Someone forgot their password | Password reset by email isn't built yet. In the Dashboard: Authentication → Users → the user → reset or set a new password |
-| A manager can't pick a client in New package | Run step 8 |
+| The Product list in New package is empty | Add a product (step 8) |
+| "A product called … already exists" | Product names are unique, ignoring capital letters; pick the existing one |
 | Changes from another person don't appear live | Check that `20261021100300_realtime.sql` ran; reloading the page always shows the latest data |
 
 ## Later: Google sign-in (not required now)

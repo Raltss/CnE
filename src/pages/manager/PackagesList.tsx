@@ -1,5 +1,6 @@
-import { FilterX, FolderSearch, Plus } from 'lucide-react'
-import { useId } from 'react'
+import { FilterX, FolderSearch, PackagePlus, Plus } from 'lucide-react'
+import { useId, useState } from 'react'
+import { AddProductDialog } from '../../components/domain/AddProductDialog'
 import { Link, useSearchParams } from 'react-router'
 import { PackageTable } from '../../components/domain/PackageTable'
 import { ViewOnlyBanner } from '../../components/domain/ViewOnlyBanner'
@@ -25,6 +26,7 @@ export function PackagesList() {
   const { me } = useSession()
   // Admins see the same list read-only: no create or edit actions.
   const canManage = me.role === 'manager'
+  const [addingProduct, setAddingProduct] = useState<number | null>(null)
   const [params, setParams] = useSearchParams()
   const filters = readFilters(params)
   const results = filterPackages(state, filters, now)
@@ -36,11 +38,9 @@ export function PackagesList() {
     const next = new URLSearchParams(params)
     if (value) next.set(key, value)
     else next.delete(key)
-    if (key === 'client') next.delete('product')
     setParams(next, { replace: true })
   }
 
-  const products = state.products.filter((p) => !filters.client || p.clientId === filters.client)
   const select = (key: keyof PackageFilters, label: string, options: Array<{ value: string; label: string }>, all: string) => (
     <div className="min-w-0">
       <label htmlFor={`${uid}-${key}`} className="mb-1 block text-xs font-semibold text-muted-fg">
@@ -62,21 +62,27 @@ export function PackagesList() {
       <PageHeader
         title="Packages"
         description={
-          canManage ? 'All packages across clients. Both managers can manage every editor and package.' : 'All packages across clients and editors.'
+          canManage ? 'All packages across products. Both managers can manage every editor and package.' : 'All packages across products and editors.'
         }
         actions={
           canManage && (
-            <Link to="/packages/new" className={buttonClasses('primary')}>
-              <Plus aria-hidden className="size-4" />
-              New package
-            </Link>
+            <>
+              <button type="button" aria-haspopup="dialog" className={buttonClasses('secondary')} onClick={() => setAddingProduct(Date.now())}>
+                <PackagePlus aria-hidden className="size-4" />
+                Add product
+              </button>
+              <Link to="/packages/new" className={buttonClasses('primary')}>
+                <Plus aria-hidden className="size-4" />
+                New package
+              </Link>
+            </>
           )
         }
       />
       {!canManage && <ViewOnlyBanner />}
 
-      <form role="search" aria-label="Filter packages" className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7" onSubmit={(e) => e.preventDefault()}>
-        <div className="min-w-0 sm:col-span-2 lg:col-span-4 xl:col-span-1">
+      <form role="search" aria-label="Filter packages" className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" onSubmit={(e) => e.preventDefault()}>
+        <div className="min-w-0 sm:col-span-2 lg:col-span-3 xl:col-span-1">
           <label htmlFor={`${uid}-q`} className="mb-1 block text-xs font-semibold text-muted-fg">
             Search
           </label>
@@ -89,8 +95,7 @@ export function PackagesList() {
             className={inputClasses()}
           />
         </div>
-        {select('client', 'Client', state.clients.map((c) => ({ value: c.id, label: c.name })), 'All clients')}
-        {select('product', 'Product', products.map((p) => ({ value: p.id, label: p.name })), 'All products')}
+        {select('product', 'Product', state.products.map((p) => ({ value: p.id, label: p.name })), 'All products')}
         {select('editor', 'Editor', editors(state).map((p) => ({ value: p.id, label: p.name })), 'All editors')}
         {select(
           'status',
@@ -130,7 +135,7 @@ export function PackagesList() {
             packages={results}
             now={now}
             caption="Packages"
-            columns={['package', 'clientProduct', 'editor', 'manager', 'status', 'deadline']}
+            columns={['package', 'product', 'editor', 'manager', 'status', 'deadline']}
             action={(pkg) =>
               canManage &&
               pkg.status !== 'completed' && (
@@ -150,10 +155,11 @@ export function PackagesList() {
               </button>
             }
           >
-            Try a different client, editor, or status.
+            Try a different product, editor, or status.
           </EmptyState>
         )}
       </Section>
+      {addingProduct !== null && <AddProductDialog key={addingProduct} open onClose={() => setAddingProduct(null)} />}
     </>
   )
 }

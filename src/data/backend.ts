@@ -1,7 +1,7 @@
 // The contract every data backend fulfils. The UI only sees this, through
 // `appStore`/`api` in ./store and the hooks in ./hooks, so swapping the
 // localStorage demo for Supabase didn't change any page.
-import type { ActionResult, AppState, AssignableRole, PackageInput, StaffAccountInput, SubmissionInput, WorkPackage } from './types'
+import type { ActionResult, AppState, AssignableRole, PackageInput, Product, StaffAccountInput, SubmissionInput, WorkPackage } from './types'
 
 export interface StoreStatus {
   phase: 'idle' | 'loading' | 'ready' | 'error'
@@ -16,6 +16,8 @@ export interface StoreStatus {
 export interface Api {
   createPackage(actorId: string, input: PackageInput): Promise<ActionResult<WorkPackage>>
   updatePackage(actorId: string, packageId: string, input: PackageInput): Promise<ActionResult<WorkPackage>>
+  /** Managers add a product by name. */
+  createProduct(actorId: string, name: string): Promise<ActionResult<Product>>
   startWork(actorId: string, packageId: string): Promise<ActionResult<unknown>>
   submitForReview(actorId: string, packageId: string, input: SubmissionInput): Promise<ActionResult<unknown>>
   requestFeedback(actorId: string, packageId: string, note: string): Promise<ActionResult<unknown>>

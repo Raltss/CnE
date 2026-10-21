@@ -1,7 +1,6 @@
 // Fictional demo data, generated relative to "now" so deadlines and attendance
 // always look current. History is replayed through the real workflow commands.
 import { DAY_MS, HOUR_MS, manilaDateKey } from '../lib/time'
-import { defaultResponsibleManagerId } from './selectors'
 import type { DemoState, Person, StaffAccount, StaffActivity } from './types'
 import {
   approvePackage,
@@ -12,7 +11,7 @@ import {
   submitForReview,
 } from './workflow'
 
-export const DEMO_STATE_VERSION = 4
+export const DEMO_STATE_VERSION = 5
 
 const people: Person[] = [
   { id: 'adm_lea', name: 'Lea Navarro', role: 'admin', title: 'Operations Admin', isActive: true },
@@ -373,21 +372,16 @@ export function createSeedState(now = new Date()): DemoState {
     nextPackageNumber: 1001,
     people: people.map((p) => ({ ...p })),
     ...seedAccounts(now),
-    clients: [
-      { id: 'cl_kapeng', name: 'Kapeng Barako Co.', managerId: 'mgr_andrea' },
-      { id: 'cl_luzfit', name: 'Luzon Fit Studio', managerId: 'mgr_paolo' },
-      { id: 'cl_bayside', name: 'Bayside Homes', managerId: 'mgr_andrea' },
-      { id: 'cl_kalye', name: 'Kalye Eats', managerId: 'mgr_paolo' },
-    ],
+    // Products stand on their own (no clients since 2026-10-21), so their names say whose they are.
     products: [
-      { id: 'prd_kb_seasonal', clientId: 'cl_kapeng', name: 'Seasonal Campaigns', managerId: 'mgr_andrea' },
-      { id: 'prd_kb_social', clientId: 'cl_kapeng', name: 'Social Shorts', managerId: null },
-      { id: 'prd_lf_promos', clientId: 'cl_luzfit', name: 'Class Promos', managerId: 'mgr_paolo' },
-      { id: 'prd_lf_coach', clientId: 'cl_luzfit', name: 'Coach Spotlights', managerId: 'mgr_andrea' },
-      { id: 'prd_bh_walk', clientId: 'cl_bayside', name: 'Property Walkthroughs', managerId: null },
-      { id: 'prd_bh_brand', clientId: 'cl_bayside', name: 'Developer Brand Film', managerId: 'mgr_paolo' },
-      { id: 'prd_ke_menu', clientId: 'cl_kalye', name: 'Menu Launches', managerId: null },
-      { id: 'prd_ke_tiktok', clientId: 'cl_kalye', name: 'TikTok Series', managerId: null },
+      { id: 'prd_kb_seasonal', name: 'Kapeng Barako Seasonal Campaigns' },
+      { id: 'prd_kb_social', name: 'Kapeng Barako Social Shorts' },
+      { id: 'prd_lf_promos', name: 'Luzon Fit Class Promos' },
+      { id: 'prd_lf_coach', name: 'Luzon Fit Coach Spotlights' },
+      { id: 'prd_bh_walk', name: 'Bayside Property Walkthroughs' },
+      { id: 'prd_bh_brand', name: 'Bayside Developer Brand Film' },
+      { id: 'prd_ke_menu', name: 'Kalye Eats Menu Launches' },
+      { id: 'prd_ke_tiktok', name: 'Kalye Eats TikTok Series' },
     ],
     packages: [],
     submissions: [],
@@ -406,14 +400,13 @@ export function createSeedState(now = new Date()): DemoState {
         spec.createdBy,
         {
           title: spec.title,
-          clientId: product.clientId,
           productId: product.id,
           description: spec.description,
           briefLink: `https://docs.google.com/document/d/cne-demo-brief-${slug(spec.title)}`,
           referenceLinks: REFERENCE_POOL.slice(0, spec.refs),
           deliverables: spec.deliverables,
           editorId: spec.editorId,
-          responsibleManagerId: defaultResponsibleManagerId(s, product.id) ?? spec.createdBy,
+          responsibleManagerId: spec.createdBy,
           deadline: at(spec.deadlineH),
         },
         at(spec.createdH),

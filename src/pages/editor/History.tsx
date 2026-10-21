@@ -21,7 +21,7 @@ export function History() {
             packages={items}
             now={now}
             caption="Completed packages"
-            columns={['package', 'clientProduct', 'status', 'round', 'submitted', 'deadline']}
+            columns={['package', 'product', 'status', 'round', 'submitted', 'deadline']}
           />
         ) : (
           <EmptyState icon={HistoryIcon} title="No completed work yet">

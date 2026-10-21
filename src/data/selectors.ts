@@ -15,27 +15,18 @@ export const isDueWithin = (pkg: WorkPackage, now: Date, ms: number) => {
   return isActive(pkg) && left >= 0 && left <= ms
 }
 
-export function defaultResponsibleManagerId(s: AppState, productId: string): string | null {
-  const product = s.products.find((p) => p.id === productId)
-  if (!product) return null
-  return product.managerId ?? s.clients.find((c) => c.id === product.clientId)?.managerId ?? null
-}
-
 export interface Lookup {
   person: (id: string) => Person | undefined
   personName: (id: string) => string
-  clientName: (id: string) => string
   productName: (id: string) => string
 }
 
 export function makeLookup(s: AppState): Lookup {
   const people = new Map(s.people.map((p) => [p.id, p]))
-  const clients = new Map(s.clients.map((c) => [c.id, c.name]))
   const products = new Map(s.products.map((p) => [p.id, p.name]))
   return {
     person: (id) => people.get(id),
     personName: (id) => people.get(id)?.name ?? 'Unknown',
-    clientName: (id) => clients.get(id) ?? 'Unknown client',
     productName: (id) => products.get(id) ?? 'Unknown product',
   }
 }
@@ -73,7 +64,6 @@ export type DueFilter = '' | 'overdue' | '48h' | 'week'
 
 export interface PackageFilters {
   q: string
-  client: string
   product: string
   editor: string
   manager: string
@@ -81,13 +71,12 @@ export interface PackageFilters {
   due: DueFilter
 }
 
-export const EMPTY_FILTERS: PackageFilters = { q: '', client: '', product: '', editor: '', manager: '', status: '', due: '' }
+export const EMPTY_FILTERS: PackageFilters = { q: '', product: '', editor: '', manager: '', status: '', due: '' }
 
 export function filterPackages(s: AppState, f: PackageFilters, now: Date) {
   const q = f.q.trim().toLowerCase()
   return s.packages
     .filter((p) => {
-      if (f.client && p.clientId !== f.client) return false
       if (f.product && p.productId !== f.product) return false
       if (f.editor && p.editorId !== f.editor) return false
       if (f.manager && p.responsibleManagerId !== f.manager) return false

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-CnE is an internal workflow web app for a video editing agency: packages (Client → Product → Package), review workflow, attendance, and in-app notifications.
+CnE is an internal workflow web app for a video editing agency: packages (Product → Package; clients were removed 2026-10-21), review workflow, attendance, and in-app notifications.
 
 **Source of truth for requirements:** [`docs/product-requirements.md`](docs/product-requirements.md). Read it before planning or implementing features, and update its "Implementation status" table as work lands.
 
@@ -51,4 +51,4 @@ Do not change the approved stack. Label any new dependency or feature not in the
 ## Known issues
 
 - `README.md` contains unresolved merge-conflict markers.
-- `20261021120000_admin_oversight.sql` and `20261021130000_staff_accounts.sql` haven't been applied to `cne-dev` yet, and `create-staff-account` isn't deployed; the app needs the migrations (it loads `staff_activity` and `must_change_password`). Nothing has been tested against the hosted Auth and Realtime; the end-to-end run used real Postgres + PostgREST with simulated Auth.
+- `20261021120000_admin_oversight.sql`, `20261021130000_staff_accounts.sql`, and `20261021140000_products_without_clients.sql` haven't been applied to `cne-dev` yet, and `create-staff-account` isn't deployed; the app needs the migrations (it loads `staff_activity` and `must_change_password`). Nothing has been tested against the hosted Auth and Realtime; the end-to-end run used real Postgres + PostgREST with simulated Auth.

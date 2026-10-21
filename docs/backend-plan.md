@@ -2,7 +2,7 @@
 
 How CnE stores data, signs people in, and enforces who can do what. Setup steps are in [`supabase-setup.md`](supabase-setup.md). The requirements are in [`product-requirements.md`](product-requirements.md).
 
-Status (2026-10-21): the first four migrations appear to be applied on `cne-dev` (sign-in and the first-admin script work there; `npx supabase db push --dry-run` confirms). `20261021120000_admin_oversight.sql`, `20261021130000_staff_accounts.sql`, and the `create-staff-account` Edge Function are ready but **not applied or deployed yet**.
+Status (2026-10-21): the first four migrations appear to be applied on `cne-dev` (sign-in and the first-admin script work there; `npx supabase db push --dry-run` confirms). `20261021120000_admin_oversight.sql`, `20261021130000_staff_accounts.sql`, `20261021140000_products_without_clients.sql`, and the `create-staff-account` Edge Function are ready but **not applied or deployed yet**.
 
 ---
 
@@ -19,9 +19,10 @@ Status (2026-10-21): the first four migrations appear to be applied on `cne-dev`
 | B7 | Own role | Nobody can change their own role or access. Two locks enforce this: an RLS policy and a trigger. |
 | B8 | Live updates | Supabase **Realtime** on packages, submissions, activity, attendance, and notifications. The app refetches on any change. Realtime applies RLS. |
 | B9 | Offline demo | The localStorage demo stays available behind `VITE_USE_DEMO_DATA=true`, for UI work without a backend. |
-| B10 | Admin oversight (2026-10-21) | Admins **read** everything managers read: clients, products, packages, submission rounds, activity, and attendance. They can't create, edit, review, submit, or clock in: the workflow functions still require the manager or editor role, and nobody writes tables directly. No impersonation: the admin always uses their own session. |
+| B10 | Admin oversight (2026-10-21) | Admins **read** everything managers read: products, packages, submission rounds, activity, and attendance. They can't create, edit, review, submit, or clock in: the workflow functions still require the manager or editor role, and nobody writes tables directly. No impersonation: the admin always uses their own session. |
 | B12 | Add user (2026-10-21) | The Edge Function verifies the caller's token with Supabase Auth (`verify_jwt = false` in `config.toml`, so it works with the new signing keys), requires an active admin, validates the input, and calls `auth.admin.createUser` with `app_metadata = { created_by, must_change_password }` (only the service role can set app metadata). It then grants the role with `approve_account()` **using the admin's own token**, so the usual checks and history apply; if that fails it deletes the new user. A trigger reads `created_by` (only if it names an active admin) to attribute "Account created". |
 | B13 | Passwords (2026-10-21) | Passwords live only in Supabase Auth. `profiles.must_change_password` makes the app show "Choose your password" before anything else; `complete_password_change()` clears it after `auth.updateUser` succeeds and records it in the history. The flag is a prompt, not a lock. The Account page re-checks the current password before changing it. |
+| B14 | Products, no clients (2026-10-21) | Work is Product → Package. `create_product(name)` (managers) adds a product; `create_package`/`update_package` no longer take a client. The old client data stays in the database, unused. New packages' responsible manager defaults to their creator in the UI. Migration `20261021140000_products_without_clients.sql`. |
 | B11 | Audited staff access (2026-10-21) | `approve_account`, `change_staff_role`, `deactivate_account`, and `reactivate_account` are the only way to change access through the API. The direct `update` on `profiles` from the first migration was removed. A trigger on `profiles` writes every role, access, name, or title change to `staff_activity` with `actor_id = auth.uid()`: the admin who did it, or null for a trusted SQL-editor step. |
 
 ## 2. Roles and what the database lets them do
@@ -32,7 +33,8 @@ Status (2026-10-21): the first four migrations appear to be applied on `cne-dev`
 | Approve, change manager↔editor, deactivate, reactivate | others only (not self, not admins), audited | — | — | — | — |
 | Grant admin access | SQL editor only | — | — | — | — |
 | Read account history (`staff_activity`) | ✅ | — | — | — | — |
-| Read clients, products | ✅ read-only | ✅ | ✅ | — | — |
+| Read products | ✅ read-only | ✅ | ✅ | — | — |
+| Add products | — | ✅ | — | — | — |
 | Read packages, submissions, activity | all, read-only | all | assigned to them | — | — |
 | Create, edit, reassign packages | — | ✅ | — | — | — |
 | Start / submit | — | — | own packages | — | — |
@@ -48,7 +50,7 @@ Status (2026-10-21): the first four migrations appear to be applied on `cne-dev`
 ```
 auth.users ──1:1── profiles (role, is_active) ──< staff_activity (account history, actor = admin)
                       │
-clients ── products   │
+products              │
    └──────────┬───────┘
           packages ──< submissions   (one row per round, never overwritten)
               ├────< activity        (history log)
@@ -58,7 +60,7 @@ profiles ──< attendance_sessions     (one open session per person: partial u
 
 - IDs are UUIDs. Package codes (`PKG-1001`, …) come from a sequence.
 - Times are `timestamptz`; the app shows them in Asia/Manila.
-- A composite foreign key makes sure a package's product belongs to its client.
+- Products have just a name (unique ignoring case, checked in `create_product`). The `clients` table and the `client_id` columns are kept from before 2026-10-21 but unused; nothing reads or requires them.
 - The private helpers (`private.has_role()`, `private.is_active_staff()`, …) live in a schema the Data API doesn't expose.
 
 ## 4. Workflow functions (called with `supabase.rpc`)
@@ -75,7 +77,8 @@ profiles ──< attendance_sessions     (one open session per person: partial u
 | `close_stale_sessions()` | any active staff | `autoCloseStaleSessions` (16 h) |
 | `mark_notification_read(id)` / `mark_all_notifications_read()` | recipient | same names |
 | `approve_account(id, role)` | admin | `approveAccount` (manager or editor only) |
-| `change_staff_role(id, role)` | admin | `changeStaffRole` (refused while they hold open packages or own clients/products) |
+| `change_staff_role(id, role)` | admin | `changeStaffRole` (refused while they hold open packages) |
+| `create_product(name)` | manager | `createProduct` |
 | `deactivate_account(id)` / `reactivate_account(id)` | admin | `deactivateAccount` / `reactivateAccount` |
 | `complete_password_change()` | the signed-in person | (Supabase only; the demo has no passwords) |
 | Edge Function `create-staff-account` | admin | `createStaffAccount` (creates the Auth user, then `approve_account`) |
@@ -116,7 +119,7 @@ Load limits for now: attendance from the last 45 days, the latest 200 notificati
 - A test against the hosted project (Auth, PostgREST, Realtime together).
 - Password reset by email ("forgot password"). For now the admin resets passwords in the Dashboard. Invite emails aren't planned; Add user uses a temporary password.
 - Editing names and titles in the app (use `private.approve_staff` in the SQL editor).
-- Client/product management screens (use `supabase/scripts/sample-clients.sql`).
+- Renaming or removing products (only adding exists; `supabase/scripts/sample-products.sql` adds a few starter products).
 - On Hold / Cancelled / Archived / Reopen, attendance corrections with audit history (same as the prototype).
 - A scheduled job for the 16-hour auto-close. It runs whenever someone uses the app, and `pg_cron` is still a proposal.
 - Generated TypeScript types (`supabase gen types`) once the schema is applied.

@@ -7,7 +7,7 @@ import { formatDateTime } from '../../lib/time'
 import { DeadlineBadge } from './DeadlineBadge'
 import { OverdueBadge, StatusBadge } from './StatusBadge'
 
-export type PackageColumn = 'package' | 'clientProduct' | 'editor' | 'manager' | 'status' | 'deadline' | 'round' | 'submitted'
+export type PackageColumn = 'package' | 'product' | 'editor' | 'manager' | 'status' | 'deadline' | 'round' | 'submitted'
 
 interface PackageTableProps {
   state: AppState
@@ -21,7 +21,7 @@ interface PackageTableProps {
 
 const HEAD: Record<PackageColumn, string> = {
   package: 'Package',
-  clientProduct: 'Client / Product',
+  product: 'Product',
   editor: 'Editor',
   manager: 'Responsible',
   status: 'Status',
@@ -45,13 +45,8 @@ export function PackageTable({ state, packages, now, columns, caption, action }:
             <span className="text-xs text-muted-fg tabular-nums">{pkg.code}</span>
           </span>
         )
-      case 'clientProduct':
-        return (
-          <span className="flex flex-col">
-            <span>{lookup.clientName(pkg.clientId)}</span>
-            <span className="text-xs text-muted-fg">{lookup.productName(pkg.productId)}</span>
-          </span>
-        )
+      case 'product':
+        return lookup.productName(pkg.productId)
       case 'editor':
         return lookup.personName(pkg.editorId)
       case 'manager':

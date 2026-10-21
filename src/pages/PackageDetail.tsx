@@ -92,10 +92,6 @@ export function PackageDetail() {
       <header className={cx(cardClasses, 'mb-5 p-4')}>
         <nav aria-label="Breadcrumb" className="text-xs text-muted-fg">
           <ol className="flex flex-wrap items-center gap-1">
-            <li>{lookup.clientName(pkg.clientId)}</li>
-            <li aria-hidden>
-              <ChevronRight className="size-3" />
-            </li>
             <li>{lookup.productName(pkg.productId)}</li>
             <li aria-hidden>
               <ChevronRight className="size-3" />

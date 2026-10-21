@@ -132,7 +132,7 @@ export function ReviewDialog({ state, pkg, me, now, onClose }: ReviewDialogProps
       open
       onClose={close}
       title={pkg.title}
-      description={`${lookup.clientName(pkg.clientId)} · ${lookup.productName(pkg.productId)}`}
+      description={lookup.productName(pkg.productId)}
       footer={
         <>
           <Link key="open" to={`/packages/${pkg.id}`} className={buttonClasses('ghost', 'md', 'sm:mr-auto')}>

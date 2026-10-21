@@ -1,6 +1,6 @@
 # Database security and workflow checks
 
-`security_and_workflow.test.sql` signs in as each kind of user (by setting the JWT `sub` claim, the way Supabase does) and checks about 115 rules:
+`security_and_workflow.test.sql` signs in as each kind of user (by setting the JWT `sub` claim, the way Supabase does) and checks about 125 rules:
 
 - anonymous visitors and not-yet-approved accounts can't read or do anything
 - nobody can change their own role; only admins change other people's roles or access, only through the staff functions, never to or from admin
@@ -9,6 +9,7 @@
 - accounts added through the Add user function are attributed to the admin named in `app_metadata` (only if that's an active admin), get the "choose your password" flag, and `complete_password_change()` clears only the caller's flag
 - editors only see their own packages, history, attendance, and notifications
 - tables can't be written directly; only the workflow functions change data
+- managers add products by name (unique, ignoring case), editors and admins can't; packages need no client
 - the full package workflow, the delivery-link rule for approval, reassignment notifications
 - one open attendance session per person, and the 16-hour auto-close
 - deactivated staff lose access but their history stays
