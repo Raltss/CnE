@@ -1,111 +1,178 @@
+@import 'tailwindcss';
+
+/* Semantic tokens: see design-system/cne/MASTER.md. Components use the
+   Tailwind utilities generated from @theme below, never raw hex. */
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --cne-primary: #0f766e;
+  --cne-primary-hover: #115e59;
+  --cne-on-primary: #ffffff;
+  --cne-accent: #c2410c;
+  --cne-on-accent: #ffffff;
+  --cne-bg: #f8fafc;
+  --cne-surface: #ffffff;
+  --cne-surface-2: #f1f5f9;
+  --cne-fg: #0f172a;
+  --cne-muted-fg: #475569;
+  --cne-border: #e2e8f0;
+  --cne-border-strong: #94a3b8;
+  --cne-ring: #0f766e;
+  --cne-danger: #b91c1c;
+  --cne-danger-bg: #fee2e2;
+  --cne-success: #15803d;
+  --cne-success-bg: #dcfce7;
+  --cne-warning: #b45309;
+  --cne-warning-bg: #fef3c7;
+  --cne-info: #1d4ed8;
+  --cne-info-bg: #dbeafe;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  --cne-st-assigned: #475569;
+  --cne-st-assigned-bg: #f1f5f9;
+  --cne-st-progress: #1d4ed8;
+  --cne-st-progress-bg: #dbeafe;
+  --cne-st-submitted: #6d28d9;
+  --cne-st-submitted-bg: #ede9fe;
+  --cne-st-feedback: #c2410c;
+  --cne-st-feedback-bg: #ffedd5;
+  --cne-st-completed: #15803d;
+  --cne-st-completed-bg: #dcfce7;
+  --cne-st-hold: #b45309;
+  --cne-st-hold-bg: #fef3c7;
+  --cne-st-closed: #4b5563;
+  --cne-st-closed-bg: #f3f4f6;
+  --cne-st-overdue: #b91c1c;
+  --cne-st-overdue-bg: #fee2e2;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
+    --cne-primary: #2dd4bf;
+    --cne-primary-hover: #5eead4;
+    --cne-on-primary: #042f2e;
+    --cne-accent: #fb923c;
+    --cne-on-accent: #431407;
+    --cne-bg: #0b1120;
+    --cne-surface: #111827;
+    --cne-surface-2: #1f2937;
+    --cne-fg: #f1f5f9;
+    --cne-muted-fg: #94a3b8;
+    --cne-border: #1f2937;
+    --cne-border-strong: #4b5563;
+    --cne-ring: #2dd4bf;
+    --cne-danger: #f87171;
+    --cne-danger-bg: rgb(127 29 29 / 0.35);
+    --cne-success: #4ade80;
+    --cne-success-bg: rgb(20 83 45 / 0.4);
+    --cne-warning: #fcd34d;
+    --cne-warning-bg: rgb(120 53 15 / 0.4);
+    --cne-info: #93c5fd;
+    --cne-info-bg: rgb(30 58 138 / 0.4);
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
+    --cne-st-assigned: #cbd5e1;
+    --cne-st-assigned-bg: rgb(51 65 85 / 0.5);
+    --cne-st-progress: #93c5fd;
+    --cne-st-progress-bg: rgb(30 58 138 / 0.45);
+    --cne-st-submitted: #c4b5fd;
+    --cne-st-submitted-bg: rgb(76 29 149 / 0.45);
+    --cne-st-feedback: #fdba74;
+    --cne-st-feedback-bg: rgb(124 45 18 / 0.45);
+    --cne-st-completed: #86efac;
+    --cne-st-completed-bg: rgb(20 83 45 / 0.45);
+    --cne-st-hold: #fcd34d;
+    --cne-st-hold-bg: rgb(120 53 15 / 0.45);
+    --cne-st-closed: #d1d5db;
+    --cne-st-closed-bg: rgb(55 65 81 / 0.5);
+    --cne-st-overdue: #fca5a5;
+    --cne-st-overdue-bg: rgb(127 29 29 / 0.45);
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+    color-scheme: dark;
   }
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
+
+@theme inline {
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: var(--cne-primary);
+  --color-primary-hover: var(--cne-primary-hover);
+  --color-on-primary: var(--cne-on-primary);
+  --color-accent: var(--cne-accent);
+  --color-on-accent: var(--cne-on-accent);
+  --color-bg: var(--cne-bg);
+  --color-surface: var(--cne-surface);
+  --color-surface-2: var(--cne-surface-2);
+  --color-fg: var(--cne-fg);
+  --color-muted-fg: var(--cne-muted-fg);
+  --color-border: var(--cne-border);
+  --color-border-strong: var(--cne-border-strong);
+  --color-ring: var(--cne-ring);
+  --color-danger: var(--cne-danger);
+  --color-danger-bg: var(--cne-danger-bg);
+  --color-success: var(--cne-success);
+  --color-success-bg: var(--cne-success-bg);
+  --color-warning: var(--cne-warning);
+  --color-warning-bg: var(--cne-warning-bg);
+  --color-info: var(--cne-info);
+  --color-info-bg: var(--cne-info-bg);
+
+  --color-st-assigned: var(--cne-st-assigned);
+  --color-st-assigned-bg: var(--cne-st-assigned-bg);
+  --color-st-progress: var(--cne-st-progress);
+  --color-st-progress-bg: var(--cne-st-progress-bg);
+  --color-st-submitted: var(--cne-st-submitted);
+  --color-st-submitted-bg: var(--cne-st-submitted-bg);
+  --color-st-feedback: var(--cne-st-feedback);
+  --color-st-feedback-bg: var(--cne-st-feedback-bg);
+  --color-st-completed: var(--cne-st-completed);
+  --color-st-completed-bg: var(--cne-st-completed-bg);
+  --color-st-hold: var(--cne-st-hold);
+  --color-st-hold-bg: var(--cne-st-hold-bg);
+  --color-st-closed: var(--cne-st-closed);
+  --color-st-closed-bg: var(--cne-st-closed-bg);
+  --color-st-overdue: var(--cne-st-overdue);
+  --color-st-overdue-bg: var(--cne-st-overdue-bg);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-bg font-sans text-fg antialiased;
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  h1,
+  h2,
+  h3 {
+    line-height: 1.25;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--cne-ring);
+    outline-offset: 2px;
+  }
+
+  button:not(:disabled),
+  [role='button'],
+  a[href],
+  select,
+  summary {
+    cursor: pointer;
+  }
+
+  dialog::backdrop {
+    background: rgb(15 23 42 / 0.55);
   }
 }
-p {
-  margin: 0;
-}
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
