@@ -1,7 +1,7 @@
 // The contract every data backend fulfils. The UI only sees this, through
 // `appStore`/`api` in ./store and the hooks in ./hooks, so swapping the
 // localStorage demo for Supabase didn't change any page.
-import type { ActionResult, AppState, AssignableRole, PackageInput, SubmissionInput, WorkPackage } from './types'
+import type { ActionResult, AppState, AssignableRole, PackageInput, StaffAccountInput, SubmissionInput, WorkPackage } from './types'
 
 export interface StoreStatus {
   phase: 'idle' | 'loading' | 'ready' | 'error'
@@ -31,6 +31,8 @@ export interface Api {
   changeStaffRole(actorId: string, profileId: string, role: AssignableRole): Promise<ActionResult<unknown>>
   deactivateAccount(actorId: string, profileId: string): Promise<ActionResult<unknown>>
   reactivateAccount(actorId: string, profileId: string): Promise<ActionResult<unknown>>
+  /** Creates a sign-in account with a temporary password and the chosen role (Edge Function in Supabase). */
+  createStaffAccount(actorId: string, input: StaffAccountInput): Promise<ActionResult<{ id: string }>>
 }
 
 export interface Backend {

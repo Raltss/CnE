@@ -125,6 +125,10 @@ In the demo, `api` comes from `demoBackend.ts` instead: it runs the same rules f
 | [`src/session/context.ts`](../src/session/context.ts) | `useSession()` returns the current person (`me`) and `signOut` to any component. |
 | [`src/pages/admin/Staff.tsx`](../src/pages/admin/Staff.tsx) | Staff & Roles: every account, its role and access, **Approve… / Manage access** buttons, and the account history. |
 | [`src/components/domain/StaffAccessDialog.tsx`](../src/components/domain/StaffAccessDialog.tsx) | The approve / change role / deactivate / reactivate dialog. Calls `api.approveAccount` etc.; each change is recorded under the admin. |
+| [`src/components/domain/AddUserDialog.tsx`](../src/components/domain/AddUserDialog.tsx) | **Add user**: name, email, title, role, temporary password (with Generate), then a one-time screen to copy the details. Calls `api.createStaffAccount`. |
+| [`supabase/functions/create-staff-account/index.ts`](../supabase/functions/create-staff-account/index.ts) | The server-side Edge Function behind Add user: checks the caller is an admin, creates the confirmed account with the service role (no email), then grants the role with `approve_account` as that admin. |
+| [`src/pages/auth/SetPassword.tsx`](../src/pages/auth/SetPassword.tsx) | "Choose your password": shown after the first sign-in with a temporary password, before anything else. |
+| [`src/pages/Account.tsx`](../src/pages/Account.tsx), [`PasswordForm.tsx`](../src/components/domain/PasswordForm.tsx) | **Your account**: profile and Change password (checks the current password first). |
 
 ### Features
 
@@ -249,10 +253,11 @@ The manager's browser is subscribed to Realtime changes on `packages`, `submissi
 | Packages, rounds, activity, attendance, notifications | Postgres tables, read with `select` and changed with `rpc` (workflow functions) |
 | Permissions | **In the database:** RLS on every table for reads, and role and status checks inside every function for writes. Nobody can change their own role |
 | Live updates | Supabase Realtime, which applies RLS |
+| Adding people | **Add user** → Edge Function `create-staff-account` → Supabase Auth admin API (service role, on the server) + `approve_account`. Passwords: `auth.updateUser`, then `complete_password_change()` |
 | Admin tasks | In the app (Staff & Roles): `approve_account`, `change_staff_role`, `deactivate_account`, `reactivate_account`, each recorded in `staff_activity` under the admin. The first admin, and admin access in general, only in the SQL editor (`first-admin.sql`, `private.approve_staff`) |
 | Admin oversight | RLS read policies give admins every package, round, activity entry, and attendance session; the workflow functions still refuse their writes |
 
-**Current state:** sign-in works against `cne-dev`. The newest migration, `20261021120000_admin_oversight.sql`, **isn't applied yet**, and the app shows "Couldn't load your work" until it is ([`supabase-setup.md` step 3](supabase-setup.md#3-apply-the-migrations)). The SQL is tested on PostgreSQL 16, and the whole workflow was run end to end in a browser against real PostgreSQL + PostgREST (with simulated Auth and Realtime).
+**Current state:** sign-in works against `cne-dev`. The two newest migrations **aren't applied yet** and the Add user function isn't deployed; the app shows "Couldn't load your account" or "Couldn't load your work" until the migrations are ([`supabase-setup.md` steps 3–4](supabase-setup.md#3-apply-the-migrations)). The SQL is tested on PostgreSQL 16, and the whole workflow was run end to end in a browser against real PostgreSQL + PostgREST (with simulated Auth and Realtime).
 
 ### Uses mock data / `localStorage`
 
@@ -269,9 +274,9 @@ The demo's data exists only in that browser, its "permissions" can be bypassed b
 
 | PRD item | Status in code |
 |---|---|
-| Invite by email (Edge Function), password reset by email | ❌ Admin creates users in the Dashboard; ask the admin to reset passwords |
+| Password reset by email ("forgot password") | ❌ Ask the admin, who resets it in the Dashboard. (Adding people works in the app with a temporary password; there are no invite emails.) |
 | Google sign-in | ❌ Deferred; a future addition |
-| Creating sign-in accounts and editing names/titles in the app | ⚠️ Accounts are created in the Dashboard; names and titles via `private.approve_staff` in the SQL editor |
+| Editing names/titles in the app | ⚠️ Set at Add user; change them later via `private.approve_staff` in the SQL editor |
 | On Hold, Resume, Cancel, Archive, Unarchive | ❌ The statuses exist in the types and the database enum, but nothing moves a package to them |
 | Reopen a Completed package | ❌ Completed packages can't be edited |
 | Attendance correction requests, approvals, direct corrections, audit history | ❌ The Attendance page shows a "later milestone" note |
@@ -296,7 +301,7 @@ The demo's data exists only in that browser, its "permissions" can be bypassed b
 
 ## 6. Try it yourself in the browser
 
-**With Supabase:** once the migrations are applied and your test users exist, follow [`supabase-setup.md` §8](supabase-setup.md#8-try-it). Sign in as each person in a separate browser or private window, and changes appear live in the others.
+**With Supabase:** once the migrations are applied and your test users exist, follow [`supabase-setup.md` §9](supabase-setup.md#9-try-it). Sign in as each person in a separate browser or private window, and changes appear live in the others.
 
 The steps below use the **offline demo**, which needs no setup and lets you switch people from one dropdown.
 
@@ -373,7 +378,8 @@ You start as **Andrea Santos (Manager)**. Switch people with the **Demo account*
 32. Open **Team → Managers → Andrea Santos → Decisions**: every round Andrea approved or sent back.
 33. Open **Staff & Roles**: **Nico Ramos** is waiting. Click **Approve…**, choose **Editor**, and approve. The account history shows "Approved as Editor, by Lea Navarro".
 34. Click **Manage access** for **Mika Dela Cruz** and pick **Manager**: it's refused because Mika still has open packages. **Deactivate…** works (with a warning), and **Reactivate** brings Mika back. Both are recorded under Lea.
+35. Click **Add user**, fill in a name and email, pick a role, click **Generate a password**, and add them. The next screen shows the details once. The demo has no sign-in, so the password isn't used here; with Supabase the person signs in with it and is asked to choose their own.
 
 ### J. Reset
 
-35. Click **Reset demo data** to restore the original sample data. This only affects your browser.
+36. Click **Reset demo data** to restore the original sample data. This only affects your browser.

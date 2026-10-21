@@ -3,6 +3,7 @@
 //  restoring ─▶ signed out ─▶ <Login>
 //      │
 //      └──────▶ signed in ─▶ load profile ─▶ not approved / deactivated ─▶ "Waiting for access"
+//                                       ├─▶ temporary password from an admin ─▶ "Choose your password"
 //                                       └─▶ active staff ─▶ load data ─▶ the app
 //
 // supabase-js keeps the session in localStorage and refreshes the token, so a
@@ -12,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import type { Person } from '../data/types'
 import { AuthLayout, StatusScreen } from '../pages/auth/AuthLayout'
 import { Login } from '../pages/auth/Login'
+import { SetPassword } from '../pages/auth/SetPassword'
 import { buttonClasses } from '../lib/styles'
 import { SessionContext } from './context'
 import { DataGate } from './DataGate'
@@ -61,7 +63,7 @@ type ProfileState =
   | { phase: 'loading' }
   | { phase: 'error'; message: string }
   | { phase: 'no_access'; reason: 'pending' | 'deactivated' }
-  | { phase: 'ready'; me: Person }
+  | { phase: 'ready'; me: Person; mustChangePassword: boolean }
 
 /** Only approved, active staff get past this point. RLS enforces the same rule on every query. */
 function StaffGate({
@@ -84,7 +86,7 @@ function StaffGate({
     let cancelled = false
     void supabase
       .from('profiles')
-      .select('id, full_name, title, role, is_active')
+      .select('id, full_name, title, role, is_active, must_change_password')
       .eq('id', userId)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -96,6 +98,7 @@ function StaffGate({
           setProfile({
             phase: 'ready',
             me: { id: data.id, name: data.full_name, title: data.title, role: data.role, isActive: true },
+            mustChangePassword: data.must_change_password,
           })
       })
     return () => {
@@ -103,8 +106,28 @@ function StaffGate({
     }
   }, [supabase, userId, attempt])
 
+  /** Sets the new password in Supabase Auth, then clears the "choose your password" prompt. */
+  const savePassword = useCallback(
+    async (next: string) => {
+      const { error } = await supabase.auth.updateUser({ password: next })
+      if (error) return passwordMessage(error.message)
+      const { error: recordError } = await supabase.rpc('complete_password_change')
+      return recordError ? `Your password was changed, but it couldn’t be recorded: ${recordError.message}` : null
+    },
+    [supabase],
+  )
+  const changePassword = useCallback(
+    async (current: string, next: string) => {
+      // Confirm it's really them (same account) before changing the password.
+      const { error } = await supabase.auth.signInWithPassword({ email, password: current })
+      if (error) return /invalid login credentials/i.test(error.message) ? 'Your current password is incorrect.' : error.message
+      return savePassword(next)
+    },
+    [supabase, email, savePassword],
+  )
+
   const me = profile.phase === 'ready' ? profile.me : null
-  const session = useMemo(() => (me ? { me, switchAccount: null, signOut } : null), [me, signOut])
+  const session = useMemo(() => (me ? { me, switchAccount: null, signOut, changePassword } : null), [me, signOut, changePassword])
 
   if (profile.phase === 'loading') return <StatusScreen title="Signing you in" message="Checking your account…" />
   if (profile.phase === 'error')
@@ -136,9 +159,29 @@ function StaffGate({
       </AuthLayout>
     )
 
+  if (profile.mustChangePassword)
+    return (
+      <SetPassword
+        email={email}
+        onSignOut={() => void signOut()}
+        onSave={async (next) => {
+          const error = await savePassword(next)
+          if (!error) setProfile({ ...profile, mustChangePassword: false })
+          return error
+        }}
+      />
+    )
+
   return (
     <SessionContext.Provider value={session}>
       <DataGate onSignOut={() => void signOut()}>{children}</DataGate>
     </SessionContext.Provider>
   )
+}
+
+/** Supabase Auth's password errors, in plain words. */
+function passwordMessage(message: string) {
+  if (/different from the old password|same_password/i.test(message)) return 'Choose a password that’s different from your current one.'
+  if (/reauthenticat/i.test(message)) return 'For security, sign out, sign back in, and try again.'
+  return message
 }

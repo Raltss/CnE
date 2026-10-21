@@ -25,6 +25,8 @@ export interface StaffAccount {
   role: Role | null
   isActive: boolean
   createdAt: string
+  /** Added by an admin with a temporary password they haven't replaced yet. */
+  mustChangePassword: boolean
 }
 
 export interface Client {
@@ -195,6 +197,15 @@ export interface PackageInput {
   responsibleManagerId: string
   /** ISO instant. */
   deadline: string
+}
+
+/** What an admin enters in "Add user". The password is temporary: they choose their own at first sign-in. */
+export interface StaffAccountInput {
+  fullName: string
+  email: string
+  title: string
+  role: AssignableRole
+  password: string
 }
 
 export interface SubmissionInput {

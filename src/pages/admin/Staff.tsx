@@ -1,6 +1,7 @@
-import { Users } from 'lucide-react'
+import { KeyRound, UserPlus, Users } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
+import { AddUserDialog } from '../../components/domain/AddUserDialog'
 import { StaffAccessDialog } from '../../components/domain/StaffAccessDialog'
 import { StaffActivityList } from '../../components/domain/StaffActivityList'
 import { AccessBadge, RoleBadge } from '../../components/domain/StatusBadge'
@@ -36,6 +37,8 @@ export function Staff() {
   const filter = (params.get('access') ?? '') as '' | Access
   const managingId = params.get('manage')
   const [historyRows, setHistoryRows] = useState(HISTORY_ROWS)
+  // A new key per opening, so the Add user form always starts empty.
+  const [adding, setAdding] = useState<number | null>(null)
 
   // Waiting accounts first, then by name.
   const accounts = [...state.accounts].sort(
@@ -56,11 +59,20 @@ export function Staff() {
 
   return (
     <>
-      <PageHeader title="Staff & Roles" description="Everyone who can sign in to CnE, their role, and whether they have access." />
+      <PageHeader
+        title="Staff & Roles"
+        description="Everyone who can sign in to CnE, their role, and whether they have access."
+        actions={
+          <button type="button" aria-haspopup="dialog" className={buttonClasses('primary')} onClick={() => setAdding(Date.now())}>
+            <UserPlus aria-hidden className="size-4" />
+            Add user
+          </button>
+        }
+      />
       <div className="mb-6">
         <Callout tone="info" title="Changes here are real and recorded under your name">
-          Approve waiting accounts, switch someone between manager and editor, or deactivate and reactivate access. Creating sign-in accounts and granting
-          admin access happen in Supabase; see <code>docs/supabase-setup.md</code>.
+          Add managers and editors, approve waiting accounts, switch someone between manager and editor, or deactivate and reactivate access. Admin access
+          is granted only in the Supabase SQL editor; see <code>docs/supabase-setup.md</code>.
         </Callout>
       </div>
 
@@ -100,6 +112,12 @@ export function Staff() {
                     <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-fg">
                       <RoleBadge role={a.role} />
                       <AccessBadge account={a} />
+                      {a.mustChangePassword && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-info-bg px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-info">
+                          <KeyRound aria-hidden className="size-3.5" strokeWidth={2.5} />
+                          Temporary password
+                        </span>
+                      )}
                       <span>added {formatDate(a.createdAt)}</span>
                     </p>
                   </div>
@@ -140,6 +158,9 @@ export function Staff() {
         </Section>
       </div>
 
+      {adding !== null && (
+        <AddUserDialog key={adding} open state={state} me={me} onClose={() => setAdding(null)} />
+      )}
       <StaffAccessDialog
         key={managing?.id ?? 'none'}
         state={state}

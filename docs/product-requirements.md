@@ -14,7 +14,7 @@ CnE is an internal workflow web application for a video editing agency. It track
 - Supabase for the database, authentication, and Realtime
 - UI design follows the **UI UX Pro Max** skill (see `CLAUDE.md`)
 - Approved UI dependencies: Tailwind CSS v4 + shadcn/ui (Radix), lucide-react, react-router, @tanstack/react-query
-- Approved Supabase pieces: Realtime (notifications and the review queue) and an Edge Function for admin invites (the Edge Function is deferred; see Accounts)
+- Approved Supabase pieces: Realtime (notifications and the review queue) and an Edge Function for adding staff (`create-staff-account`, in use since 2026-10-21; see Accounts)
 
 Do not change the stack without explicit approval.
 
@@ -31,10 +31,12 @@ Do not change the stack without explicit approval.
 
 - **Invite-only.** No self sign-up. Public sign-up is turned off in Supabase.
 - **Email + password** (Supabase Auth). **Google OAuth is deferred**, a future addition and not a setup prerequisite.
-- **Initial approach (2026-10-21):** the admin creates sign-in accounts in the Supabase Dashboard (no invitation email). New accounts have no role and no access until approved. The admin then approves them as manager or editor in **Staff & Roles**, or with the trusted SQL function `private.approve_staff` in the SQL editor. See [`supabase-setup.md`](supabase-setup.md).
+- **Dashboard accounts (2026-10-21):** sign-in accounts can also be created in the Supabase Dashboard (no invitation email). Those have no role and no access until approved. The admin then approves them as manager or editor in **Staff & Roles**, or with the trusted SQL function `private.approve_staff` in the SQL editor. See [`supabase-setup.md`](supabase-setup.md).
 - **Admin access** is granted only in the SQL editor (`supabase/scripts/first-admin.sql` for the first admin). The app can't create, change, or deactivate admin accounts.
 - **Account history:** every approval, role change, deactivation, reactivation, and name/title change is recorded with who made it (the admin, or "trusted setup" for SQL-editor changes) and when.
-- **Later:** the admin invites staff by email through a Supabase Edge Function (needs the service role), the invitee sets a password from the invite link, and password reset goes by email. Until then, the admin resets passwords in the Dashboard.
+- **Add user (2026-10-21):** the admin adds a manager or editor in **Staff & Roles** with a name, work email, optional job title, role, and a **temporary password** they share privately. **No email is sent.** A Supabase Edge Function creates the account (it needs the service role, which never reaches the browser).
+- **Own password:** someone added with a temporary password must choose their own at first sign-in, before seeing anything else. Everyone can change their password later on the **Your account** page (current password required).
+- **Later:** password reset by email ("forgot password"). Until then, the admin resets passwords in the Dashboard.
 - **Roles are enforced in the database** (Row Level Security and checked workflow functions), not only in the UI. Nobody can assign or change their own role.
 - **Deactivation:** departed staff keep their history but can no longer log in or read data.
 
@@ -42,7 +44,8 @@ Do not change the stack without explicit approval.
 
 | Capability | Admin | Manager | Editor |
 |---|---|---|---|
-| Invite/deactivate staff, change roles (manager ↔ editor), audited | ✅ | — | — |
+| Add managers and editors (temporary password), deactivate, change roles (manager ↔ editor), audited | ✅ | — | — |
+| Change own password | ✅ | ✅ | ✅ |
 | Grant or remove admin access | SQL editor only | — | — |
 | View the account history | ✅ | — | — |
 | Manage clients and products | — | ✅ | — |
@@ -223,6 +226,7 @@ Answers to the open planning questions.
 | 14 | Live updates | Supabase Realtime |
 | 15 | First accounts | Created in the Supabase Dashboard; roles assigned by a trusted admin in the SQL editor. Invite Edge Function later (2026-10-21) |
 | 16 | Admin actions | In the app, admins approve accounts, switch manager ↔ editor, and deactivate/reactivate, through audited database functions. Admin access stays SQL-only. Package and attendance views are read-only (2026-10-21) |
+| 17 | Adding people | Admin **Add user** form with a temporary password and no email; the person must choose their own password at first sign-in; everyone can change theirs on the Account page (2026-10-21) |
 
 ## 11. Interface proposal (approved)
 
@@ -237,6 +241,7 @@ Minimalism / Swiss: dense, grid-based, high contrast, functional. Light theme by
 - **Manager:** Dashboard · Review Queue · Deadlines · Packages · Time Clock · Clients & Products · Editors · Attendance · Notifications. *(Deadlines and Time Clock added 2026-10-21 at the user's request, to take upcoming/overdue work and clock-in/out off the dashboard.)*
 - **Editor:** My Work · Needs Changes · History · Attendance · Notifications
 - **Admin:** Overview · Team · Packages · Attendance · Staff & Roles. No clock pill and no notifications. *(Revised 2026-10-21 for read-only oversight; see `design-system/cne/pages/admin.md`.)*
+- **Everyone:** **Your account** (profile and Change password), linked from the sidebar footer, or by tapping your name in the top bar on small screens.
 - Every package and every list filter has its own URL (filters kept in the query string).
 
 ### Manager dashboard
@@ -327,7 +332,7 @@ Milestone 1, the **frontend prototype**, is done (see [`prototype-notes.md`](pro
 | Design system | ✅ Saved to `design-system/cne/MASTER.md` |
 | UI dependencies | ✅ Tailwind CSS v4, lucide-react, react-router installed. shadcn/ui and TanStack Query not needed yet |
 | Supabase client, schema, RLS | 🟡 5 migrations, RLS on every table, workflow and staff functions, about 100 SQL security checks passing (plain Postgres 16 + Supabase stub), plus an end-to-end browser run against real Postgres + PostgREST. The admin-oversight migration isn't applied to `cne-dev` yet |
-| Auth, invites, roles | 🟡 Email/password sign-in, session restore, sign-out, approval gate, roles enforced in the database. Accounts are created in the Dashboard and roles assigned in SQL. Invite Edge Function, password reset, and Google OAuth not started |
+| Auth, accounts, roles | 🟡 Email/password sign-in, session restore, sign-out, approval gate, roles enforced in the database. Admin **Add user** (Edge Function, temporary password), forced first password change, Account page with Change password. Function not deployed yet. Password reset by email and Google OAuth not started |
 | Clients / products / packages | 🟡 Create, edit, reassign, filters, on Supabase (`create_package`/`update_package`). Clients/products come from `supabase/scripts/sample-clients.sql`; no management UI |
 | Package workflow (main statuses) | 🟡 Assigned → In Progress → Submitted → Apply Feedback / Completed, enforced by database functions |
 | On Hold / Cancelled / Archived / Reopen | Not started |
@@ -336,5 +341,5 @@ Milestone 1, the **frontend prototype**, is done (see [`prototype-notes.md`](pro
 | Attendance corrections + audit | Not started |
 | Notifications | 🟡 In-app, unread counts, mark read; Supabase Realtime wired up (not yet tested against a live project) |
 | Manager / editor dashboards | 🧪 Prototype. Manager dashboard simplified (4 tiles, review + workload, drill-down dialogs; see `design-system/cne/pages/dashboard.md`), plus Deadlines and Time Clock pages |
-| Admin (staff and roles) | 🟡 Staff & Roles: approve, change manager ↔ editor, deactivate/reactivate, with an account history naming the admin. First admin via `first-admin.sql`. Invites, name edits, and password resets not in the app yet |
+| Admin (staff and roles) | 🟡 Staff & Roles: add users, approve, change manager ↔ editor, deactivate/reactivate, with an account history naming the admin. First admin via `first-admin.sql`. Name edits and password resets not in the app yet |
 | Admin oversight | 🟡 Overview, Team, per-person detail pages (assignments, submissions, review queue, decisions, attendance, with URL filters), read-only Packages, package detail, and Attendance. Enforced by RLS; needs `20261021120000_admin_oversight.sql` applied |

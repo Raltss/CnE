@@ -16,11 +16,12 @@ import type {
   PackageStatus,
   Role,
   StaffAccount,
+  StaffAccountInput,
   StaffChangeType,
   SubmissionInput,
   WorkPackage,
 } from './types'
-import { validatePackageInput, validateSubmissionInput } from './validation'
+import { validatePackageInput, validateStaffAccountInput, validateSubmissionInput } from './validation'
 
 export const AUTO_CLOSE_HOURS = 16
 
@@ -446,4 +447,41 @@ export function reactivateAccount(s: DemoState, actorId: string, profileId: stri
   if (account.isActive) return fail(`${account.name} is already active.`)
   applyAccess(s, account, { role: account.role, isActive: true }, actorId, at)
   return ok(undefined)
+}
+
+/**
+ * Mirrors supabase/functions/create-staff-account: an admin adds a manager or
+ * editor, recorded as created and approved by that admin. The demo has no
+ * sign-in, so the temporary password is checked but not stored.
+ */
+export function createStaffAccount(s: DemoState, actorId: string, input: StaffAccountInput, at: string): ActionResult<{ id: string }> {
+  if (!requireRole(s, actorId, 'admin')) return fail('Only admins can add users.')
+  const errors = validateStaffAccountInput(s, input)
+  if (Object.keys(errors).length) return fail('Fix the highlighted fields.', errors as Record<string, string>)
+  const account: StaffAccount = {
+    id: newId('usr'),
+    name: input.fullName.trim(),
+    email: input.email.trim().toLowerCase(),
+    title: input.title.trim(),
+    role: null,
+    isActive: false,
+    createdAt: at,
+    mustChangePassword: false,
+  }
+  s.accounts.push(account)
+  s.staffActivity.push({
+    id: newId('stf'),
+    profileId: account.id,
+    actorId,
+    type: 'account_created',
+    oldRole: null,
+    newRole: null,
+    oldIsActive: null,
+    newIsActive: false,
+    message: 'Account created, waiting for approval',
+    // A millisecond earlier, so the history lists it before the approval.
+    at: new Date(new Date(at).getTime() - 1).toISOString(),
+  })
+  applyAccess(s, account, { role: input.role, isActive: true }, actorId, at)
+  return ok({ id: account.id })
 }

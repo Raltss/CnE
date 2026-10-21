@@ -388,6 +388,13 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Admin "Add user" (supabase/functions/create-staff-account). The function verifies
+# the caller's token itself with Supabase Auth, which also works with the new
+# JWT signing keys, and then requires an active admin.
+[functions.create-staff-account]
+enabled = true
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
