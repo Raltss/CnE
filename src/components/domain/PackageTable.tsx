@@ -1,22 +1,23 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
-import { isOverdue, lastSubmittedAt, makeLookup, roundCount } from '../../data/selectors'
-import type { AppState, WorkPackage } from '../../data/types'
+import { isOverdue, type Lookup } from '../../data/selectors'
+import type { PackageSummary } from '../../data/types'
 import { cx } from '../../lib/styles'
 import { formatDateTime } from '../../lib/time'
 import { DeadlineBadge } from './DeadlineBadge'
 import { OverdueBadge, StatusBadge } from './StatusBadge'
+import { useIsWide } from '../../data/hooks'
 
 export type PackageColumn = 'package' | 'product' | 'editor' | 'manager' | 'status' | 'deadline' | 'round' | 'submitted'
 
 interface PackageTableProps {
-  state: AppState
-  packages: WorkPackage[]
+  lookup: Lookup
+  packages: PackageSummary[]
   now: Date
   columns: PackageColumn[]
   caption: string
   /** Optional per-row action (e.g. Start / Review). */
-  action?: (pkg: WorkPackage) => ReactNode
+  action?: (pkg: PackageSummary) => ReactNode
 }
 
 const HEAD: Record<PackageColumn, string> = {
@@ -31,10 +32,9 @@ const HEAD: Record<PackageColumn, string> = {
 }
 
 /** Dense table on ≥768px; stacked cards on mobile. */
-export function PackageTable({ state, packages, now, columns, caption, action }: PackageTableProps) {
-  const lookup = makeLookup(state)
-
-  const cell = (pkg: WorkPackage, col: PackageColumn): ReactNode => {
+export function PackageTable({ lookup, packages, now, columns, caption, action }: PackageTableProps) {
+  const wide = useIsWide()
+  const cell = (pkg: PackageSummary, col: PackageColumn): ReactNode => {
     switch (col) {
       case 'package':
         return (
@@ -60,70 +60,68 @@ export function PackageTable({ state, packages, now, columns, caption, action }:
         )
       case 'deadline':
         return <DeadlineBadge pkg={pkg} now={now} />
-      case 'round': {
-        const rounds = roundCount(state, pkg.id)
-        return rounds ? <span className="tabular-nums">Round {rounds}</span> : <span className="text-muted-fg">—</span>
-      }
-      case 'submitted': {
-        const at = lastSubmittedAt(state, pkg.id)
-        return at ? <span className="tabular-nums">{formatDateTime(at)}</span> : <span className="text-muted-fg">—</span>
-      }
+      case 'round':
+        return pkg.latest ? <span className="tabular-nums">Round {pkg.latest.round}</span> : <span className="text-muted-fg">—</span>
+      case 'submitted':
+        return pkg.latest ? <span className="tabular-nums">{formatDateTime(pkg.latest.submittedAt)}</span> : <span className="text-muted-fg">—</span>
     }
   }
 
   return (
     <>
-      <table className="hidden w-full border-collapse text-left text-sm md:table">
-        <caption className="sr-only">{caption}</caption>
-        <thead className="bg-surface-2 text-xs font-semibold text-muted-fg">
-          <tr>
-            {columns.map((col) => (
-              <th key={col} scope="col" className="px-4 py-2 whitespace-nowrap">
-                {HEAD[col]}
-              </th>
-            ))}
-            {action && (
-              <th scope="col" className="px-4 py-2 text-right">
-                <span className="sr-only">Actions</span>
-              </th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {packages.map((pkg) => (
-            <tr key={pkg.id} className="border-t border-border align-top transition-colors duration-150 hover:bg-surface-2/60">
+      {wide ? (
+        <table className="w-full border-collapse text-left text-sm">
+          <caption className="sr-only">{caption}</caption>
+          <thead className="bg-surface-2 text-xs font-semibold text-muted-fg">
+            <tr>
               {columns.map((col) => (
-                <td key={col} className={cx('px-4 py-3', col === 'package' && 'min-w-48')}>
-                  {cell(pkg, col)}
-                </td>
+                <th key={col} scope="col" className="px-4 py-2 whitespace-nowrap">
+                  {HEAD[col]}
+                </th>
               ))}
-              {action && <td className="px-4 py-3 text-right whitespace-nowrap">{action(pkg)}</td>}
+              {action && (
+                <th scope="col" className="px-4 py-2 text-right">
+                  <span className="sr-only">Actions</span>
+                </th>
+              )}
             </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <ul className="divide-y divide-border md:hidden" aria-label={caption}>
-        {packages.map((pkg) => (
-          <li key={pkg.id} className="flex flex-col gap-2 px-4 py-3">
-            <div className="flex items-start justify-between gap-2">
-              {cell(pkg, 'package')}
-              {cell(pkg, 'status')}
-            </div>
-            <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-              {columns
-                .filter((c) => c !== 'package' && c !== 'status')
-                .map((col) => (
-                  <div key={col} className="min-w-0">
-                    <dt className="text-xs text-muted-fg">{HEAD[col]}</dt>
-                    <dd className="min-w-0 break-words">{cell(pkg, col)}</dd>
-                  </div>
+          </thead>
+          <tbody>
+            {packages.map((pkg) => (
+              <tr key={pkg.id} className="border-t border-border align-top transition-colors duration-150 hover:bg-surface-2/60">
+                {columns.map((col) => (
+                  <td key={col} className={cx('px-4 py-3', col === 'package' && 'min-w-48')}>
+                    {cell(pkg, col)}
+                  </td>
                 ))}
-            </dl>
-            {action && <div className="flex justify-end">{action(pkg)}</div>}
-          </li>
-        ))}
-      </ul>
+                {action && <td className="px-4 py-3 text-right whitespace-nowrap">{action(pkg)}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <ul className="divide-y divide-border" aria-label={caption}>
+          {packages.map((pkg) => (
+            <li key={pkg.id} className="flex flex-col gap-2 px-4 py-3">
+              <div className="flex items-start justify-between gap-2">
+                {cell(pkg, 'package')}
+                {cell(pkg, 'status')}
+              </div>
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                {columns
+                  .filter((c) => c !== 'package' && c !== 'status')
+                  .map((col) => (
+                    <div key={col} className="min-w-0">
+                      <dt className="text-xs text-muted-fg">{HEAD[col]}</dt>
+                      <dd className="min-w-0 break-words">{cell(pkg, col)}</dd>
+                    </div>
+                  ))}
+              </dl>
+              {action && <div className="flex justify-end">{action(pkg)}</div>}
+            </li>
+          ))}
+        </ul>
+      )}
     </>
   )
 }

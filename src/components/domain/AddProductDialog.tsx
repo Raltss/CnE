@@ -1,8 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { api } from '../../data/store'
+import { api } from '../../data/api'
 import type { Product } from '../../data/types'
 import { buttonClasses, fieldAria, inputClasses } from '../../lib/styles'
-import { useSession } from '../../session/context'
 import { Dialog } from '../ui/Dialog'
 import { Field } from '../ui/Field'
 import { useToast } from '../ui/toast-context'
@@ -16,7 +15,6 @@ interface AddProductDialogProps {
 
 /** Managers: add a product by name. Re-key it per opening so the field starts empty. */
 export function AddProductDialog({ open, onClose, onAdded }: AddProductDialogProps) {
-  const { me } = useSession()
   const toast = useToast()
   const [name, setName] = useState('')
   const [error, setError] = useState<string | undefined>()
@@ -25,7 +23,7 @@ export function AddProductDialog({ open, onClose, onAdded }: AddProductDialogPro
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     setBusy(true)
-    const result = await api.createProduct(me.id, name)
+    const result = await api.createProduct(name)
     setBusy(false)
     if (!result.ok) {
       setError(result.fieldErrors?.name ?? result.error)

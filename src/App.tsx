@@ -1,16 +1,17 @@
-import { createBrowserRouter, RouterProvider } from 'react-router'
 import { ToastProvider } from './components/ui/ToastProvider'
-import { dataMode } from './data/store'
+import { startSession } from './data/queries'
 import { supabase } from './lib/supabase'
 import { StatusScreen } from './pages/auth/AuthLayout'
-import { routes } from './routes'
 import { AuthProvider } from './session/AuthProvider'
-import { DemoSessionProvider } from './session/DemoSessionProvider'
+import SignedInApp from './SignedInApp'
 
-const router = createBrowserRouter(routes)
+// The signed-in app and the three home pages ship in the first download: most
+// visits are by someone already signed in, and a separate download for them
+// slowed the first screen more than it sped up the sign-in page (Lighthouse,
+// 2026-10-21). The other pages are separate downloads (routes.tsx).
 
 export default function App() {
-  if (dataMode === 'unconfigured')
+  if (!supabase)
     return (
       <StatusScreen
         title="Supabase isn’t configured"
@@ -18,7 +19,7 @@ export default function App() {
         message={
           <>
             Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> to <code>.env.local</code> and restart{' '}
-            <code>npm run dev</code>. To try the offline demo instead, set <code>VITE_USE_DEMO_DATA=true</code>.
+            <code>npm run dev</code>.
           </>
         }
       />
@@ -26,15 +27,9 @@ export default function App() {
 
   return (
     <ToastProvider>
-      {dataMode === 'demo' ? (
-        <DemoSessionProvider>
-          <RouterProvider router={router} />
-        </DemoSessionProvider>
-      ) : (
-        <AuthProvider supabase={supabase!}>
-          <RouterProvider router={router} />
-        </AuthProvider>
-      )}
+      <AuthProvider supabase={supabase} onSignedIn={startSession}>
+        <SignedInApp />
+      </AuthProvider>
     </ToastProvider>
   )
 }

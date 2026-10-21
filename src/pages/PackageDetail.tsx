@@ -28,13 +28,14 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Dialog } from '../components/ui/Dialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { Field } from '../components/ui/Field'
+import { PageStatus } from '../components/ui/PageStatus'
 import { Section } from '../components/ui/Section'
 import { useToast } from '../components/ui/toast-context'
-import { useAppState, useNow } from '../data/hooks'
-import { canView, isOverdue, makeLookup, roundCount } from '../data/selectors'
-import { api } from '../data/store'
-import type { AppState, Person, WorkPackage } from '../data/types'
-import { approvalBlocker, latestSubmission } from '../data/workflow'
+import { api } from '../data/api'
+import { useNow } from '../data/hooks'
+import { pageStatus, useDirectory, usePackage } from '../data/queries'
+import { approvalBlocker, isOverdue, type Lookup } from '../data/selectors'
+import type { Person, WorkPackage } from '../data/types'
 import { HOME } from '../layout/nav'
 import { buttonClasses, cardClasses, cx, fieldAria, inputClasses } from '../lib/styles'
 import { formatDateTime } from '../lib/time'
@@ -42,38 +43,31 @@ import { useSession } from '../session/context'
 
 export function PackageDetail() {
   const { id } = useParams()
-  const state = useAppState()
   const now = useNow()
   const { me } = useSession()
-  const pkg = state.packages.find((p) => p.id === id)
+  const detail = usePackage(id)
+  const { lookup, queries } = useDirectory()
   const back = me.role === 'editor' ? { to: HOME.editor, label: 'My work' } : { to: '/packages', label: 'Packages' }
 
-  if (!pkg)
+  const status = pageStatus(detail, ...queries)
+  if (status.pending || status.error) return <PageStatus {...status} />
+
+  // RLS returns nothing for packages this person may not see (e.g. another editor's).
+  if (!detail.data)
     return (
       <EmptyState
-        icon={SearchX}
-        title="Package not found"
+        icon={me.role === 'editor' ? ShieldAlert : SearchX}
+        title={me.role === 'editor' ? 'Package not found, or not assigned to you' : 'Package not found'}
         tone="error"
         action={<Link to={back.to} className={buttonClasses('primary')}>Back to {back.label.toLowerCase()}</Link>}
       >
-        It may have been removed by a demo data reset.
-      </EmptyState>
-    )
-  if (!canView(me, pkg))
-    return (
-      <EmptyState
-        icon={ShieldAlert}
-        title="This package isn’t assigned to you"
-        tone="error"
-        action={<Link to={back.to} className={buttonClasses('primary')}>Back to {back.label.toLowerCase()}</Link>}
-      >
-        Editors can only open their own packages. It may have been reassigned to another editor.
+        {me.role === 'editor' ? 'Editors can open only their own packages. It may have been reassigned to another editor.' : 'The link may be wrong.'}
       </EmptyState>
     )
 
-  const lookup = makeLookup(state)
-  const rounds = roundCount(state, pkg.id)
-  const latest = latestSubmission(state, pkg.id)
+  const { pkg, rounds: roundList, activity } = detail.data
+  const rounds = roundList.length
+  const latest = roundList[0] ?? null
 
   return (
     <>
@@ -139,7 +133,7 @@ export function PackageDetail() {
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-5 lg:order-2">
           <Section title="Actions">
-            <ActionPanel state={state} pkg={pkg} me={me} />
+            <ActionPanel lookup={lookup} pkg={pkg} me={me} />
           </Section>
         </div>
 
@@ -184,11 +178,11 @@ export function PackageDetail() {
           </Section>
 
           <Section title="Submission history" description="Every round is kept, newest first">
-            <SubmissionHistory state={state} packageId={pkg.id} />
+            <SubmissionHistory rounds={roundList} lookup={lookup} />
           </Section>
 
           <Section title="Activity">
-            <ActivityTimeline state={state} packageId={pkg.id} />
+            <ActivityTimeline events={activity} lookup={lookup} />
           </Section>
         </div>
       </div>
@@ -196,11 +190,10 @@ export function PackageDetail() {
   )
 }
 
-function ActionPanel({ state, pkg, me }: { state: AppState; pkg: WorkPackage; me: Person }) {
-  const lookup = makeLookup(state)
+function ActionPanel({ lookup, pkg, me }: { lookup: Lookup; pkg: WorkPackage; me: Person }) {
   const toast = useToast()
   const [starting, setStarting] = useState(false)
-  const latest = latestSubmission(state, pkg.id)
+  const latest = pkg.latest
   const nextRound = (latest?.round ?? 0) + 1
   const managerName = lookup.personName(pkg.responsibleManagerId)
 
@@ -215,7 +208,7 @@ function ActionPanel({ state, pkg, me }: { state: AppState; pkg: WorkPackage; me
             disabled={starting}
             onClick={async () => {
               setStarting(true)
-              const r = await api.startWork(me.id, pkg.id)
+              const r = await api.startWork(pkg.id)
               setStarting(false)
               toast.show(r.ok ? 'Work started' : r.error, r.ok ? 'success' : 'error')
             }}
@@ -226,7 +219,7 @@ function ActionPanel({ state, pkg, me }: { state: AppState; pkg: WorkPackage; me
         </div>
       )
     if (pkg.status === 'in_progress' || pkg.status === 'apply_feedback')
-      return <SubmissionForm pkg={pkg} editorId={me.id} managerName={managerName} nextRound={nextRound} />
+      return <SubmissionForm pkg={pkg} managerName={managerName} nextRound={nextRound} />
     if (pkg.status === 'submitted')
       return (
         <StatusNote icon={Hourglass} title={`Round ${latest?.round} is awaiting review`}>
@@ -258,7 +251,7 @@ function ActionPanel({ state, pkg, me }: { state: AppState; pkg: WorkPackage; me
     )
 
   // Manager
-  if (pkg.status === 'submitted') return <ReviewActions state={state} pkg={pkg} me={me} />
+  if (pkg.status === 'submitted') return <ReviewActions lookup={lookup} pkg={pkg} />
   const notes: Partial<Record<WorkPackage['status'], string>> = {
     assigned: `Waiting for ${lookup.personName(pkg.editorId)} to start work.`,
     in_progress: `${lookup.personName(pkg.editorId)} is working on it. Review actions appear once it’s submitted.`,
@@ -280,11 +273,10 @@ function StatusNote({ icon: Icon, title, children }: { icon: LucideIcon; title: 
   )
 }
 
-function ReviewActions({ state, pkg, me }: { state: AppState; pkg: WorkPackage; me: Person }) {
+function ReviewActions({ lookup, pkg }: { lookup: Lookup; pkg: WorkPackage }) {
   const toast = useToast()
-  const lookup = makeLookup(state)
-  const latest = latestSubmission(state, pkg.id)
-  const blocker = approvalBlocker(state, pkg)
+  const latest = pkg.latest
+  const blocker = approvalBlocker(latest)
   const [confirmApprove, setConfirmApprove] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [note, setNote] = useState('')
@@ -294,13 +286,13 @@ function ReviewActions({ state, pkg, me }: { state: AppState; pkg: WorkPackage; 
   const approve = async () => {
     setConfirmApprove(false)
     setBusy(true)
-    const r = await api.approve(me.id, pkg.id)
+    const r = await api.approve(pkg.id)
     setBusy(false)
     toast.show(r.ok ? `Approved. ${lookup.personName(pkg.editorId)} has been notified.` : r.error, r.ok ? 'success' : 'error')
   }
   const sendFeedback = async () => {
     setBusy(true)
-    const r = await api.requestFeedback(me.id, pkg.id, note)
+    const r = await api.requestFeedback(pkg.id, note)
     setBusy(false)
     if (!r.ok) {
       setNoteError(r.fieldErrors?.note ?? r.error)

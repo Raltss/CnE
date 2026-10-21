@@ -7,32 +7,48 @@ import { FeedbackCard } from '../../components/domain/FeedbackCard'
 import { KpiStat, KpiStrip } from '../../components/domain/KpiStat'
 import { PackageTable } from '../../components/domain/PackageTable'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { PageStatus } from '../../components/ui/PageStatus'
 import { PageHeader, Section } from '../../components/ui/Section'
-import { useAppState, useNow } from '../../data/hooks'
-import { isDueWithin, isOverdue, sessionsFor } from '../../data/selectors'
+import { useNow } from '../../data/hooks'
+import { pageStatus, pagedRows, pagedTotal, useActiveWork, useDirectory, useFinishedPackages, usePersonAttendance } from '../../data/queries'
+import { isActive, isDueWithin, isOverdue, withinDays } from '../../data/selectors'
 import { DAY_MS } from '../../lib/time'
 import { useSession } from '../../session/context'
-import { myActive, myHistory, myNeedsChanges } from './editorData'
 
 export function MyWork() {
-  const state = useAppState()
   const now = useNow()
   const { me } = useSession()
-  const active = myActive(state, me.id)
-  const changes = myNeedsChanges(state, me.id)
+  // RLS returns only this editor's packages; the explicit filters say so too.
+  const work = useActiveWork()
+  const finished = useFinishedPackages({ editor: me.id })
+  const attendance = usePersonAttendance(me.id)
+  const { lookup, queries } = useDirectory()
+  // The header needs no data, so it shows right away; the rest waits for its queries.
+  const header = <PageHeader title={`Hi, ${me.name.split(' ')[0]}`} description="Your assigned packages, deadlines, and submissions." />
+  const status = pageStatus(work, finished, attendance, ...queries)
+  if (status.pending || status.error)
+    return (
+      <>
+        {header}
+        <PageStatus {...status} />
+      </>
+    )
+
+  const active = work.data!.filter((p) => p.editorId === me.id && isActive(p))
+  const changes = active.filter((p) => p.status === 'apply_feedback')
   const others = active.filter((p) => p.status !== 'apply_feedback')
-  const recent = myHistory(state, me.id).slice(0, 5)
-  const weekSessions = sessionsFor(state, me.id).filter((s) => now.getTime() - new Date(s.clockIn).getTime() <= 7 * DAY_MS)
+  const recent = pagedRows(finished.data).slice(0, 5)
+  const weekSessions = attendance.data!.filter((s) => withinDays(s.clockIn, 7, now))
 
   return (
     <>
-      <PageHeader title={`Hi, ${me.name.split(' ')[0]}`} description="Your assigned packages, deadlines, and submissions." />
+      {header}
       <KpiStrip>
         <KpiStat label="Active packages" value={active.length} icon={ListTodo} />
         <KpiStat label="Needs changes" value={changes.length} icon={RotateCcw} to="/needs-changes" tone="attention" />
         <KpiStat label="Due in 7 days" value={active.filter((p) => isDueWithin(p, now, 7 * DAY_MS)).length} icon={CalendarClock} />
         <KpiStat label="Overdue" value={active.filter((p) => isOverdue(p, now)).length} icon={TriangleAlert} tone="danger" />
-        <KpiStat label="Completed" value={myHistory(state, me.id).length} icon={CircleCheck} to="/history" />
+        <KpiStat label="Completed" value={pagedTotal(finished.data)} icon={CircleCheck} to="/history" />
       </KpiStrip>
 
       <div className="grid gap-5 xl:grid-cols-3">
@@ -44,7 +60,7 @@ export function MyWork() {
                 Needs changes ({changes.length})
               </h2>
               {changes.map((pkg) => (
-                <FeedbackCard key={pkg.id} state={state} pkg={pkg} now={now} />
+                <FeedbackCard key={pkg.id} lookup={lookup} pkg={pkg} now={now} />
               ))}
             </section>
           )}
@@ -52,12 +68,12 @@ export function MyWork() {
           <Section title="My packages" description="Sorted by deadline" flush>
             {others.length ? (
               <PackageTable
-                state={state}
+                lookup={lookup}
                 packages={others}
                 now={now}
                 caption="My packages"
                 columns={['package', 'product', 'status', 'deadline', 'round']}
-                action={(pkg) => <EditorPackageAction pkg={pkg} editorId={me.id} />}
+                action={(pkg) => <EditorPackageAction pkg={pkg} />}
               />
             ) : (
               <EmptyState icon={ListTodo} title={changes.length ? 'No other active packages' : 'No packages assigned'} compact>
@@ -76,7 +92,7 @@ export function MyWork() {
             }
           >
             {recent.length ? (
-              <PackageTable state={state} packages={recent} now={now} caption="Recently completed" columns={['package', 'product', 'status', 'round']} />
+              <PackageTable lookup={lookup} packages={recent} now={now} caption="Recently completed" columns={['package', 'product', 'status', 'round']} />
             ) : (
               <EmptyState icon={CircleCheck} title="No completed work yet" compact />
             )}
@@ -94,7 +110,7 @@ export function MyWork() {
               </Link>
             }
           >
-            <AttendanceTable state={state} sessions={weekSessions.slice(0, 7)} now={now} caption="My attendance this week" />
+            <AttendanceTable sessions={weekSessions.slice(0, 7)} now={now} caption="My attendance this week" />
           </Section>
         </div>
       </div>

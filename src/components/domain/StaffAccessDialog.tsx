@@ -1,9 +1,9 @@
 import { ShieldCheck } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import { accessOf, isActive, staffActivityFor } from '../../data/selectors'
-import { api } from '../../data/store'
-import type { AppState, AssignableRole, Person, StaffAccount } from '../../data/types'
-import { roleChangeBlocker } from '../../data/workflow'
+import { api } from '../../data/api'
+import { useAccountHistory, useActiveWork } from '../../data/queries'
+import { accessOf, isActive, roleChangeBlocker } from '../../data/selectors'
+import type { AssignableRole, Person, StaffAccount } from '../../data/types'
 import { ROLE_META } from '../../lib/status'
 import { buttonClasses } from '../../lib/styles'
 import { Callout } from '../ui/Callout'
@@ -14,7 +14,8 @@ import { StaffActivityList } from './StaffActivityList'
 import { AccessBadge, RoleBadge } from './StatusBadge'
 
 interface StaffAccessDialogProps {
-  state: AppState
+  /** Every account, for names in the history. */
+  accounts: StaffAccount[]
   /** The account being managed; null closes the dialog. Re-key per account so choices reset. */
   account: StaffAccount | null
   me: Person
@@ -25,7 +26,7 @@ interface StaffAccessDialogProps {
  * Approve, change role, deactivate, or reactivate one account. Every change
  * runs as the signed-in admin and is recorded in the account history.
  */
-export function StaffAccessDialog({ state, account, me, onClose }: StaffAccessDialogProps) {
+export function StaffAccessDialog({ accounts, account, me, onClose }: StaffAccessDialogProps) {
   const toast = useToast()
   const initialRole: AssignableRole = account?.role === 'manager' ? 'manager' : 'editor'
   const [role, setRole] = useState<AssignableRole>(initialRole)
@@ -33,14 +34,18 @@ export function StaffAccessDialog({ state, account, me, onClose }: StaffAccessDi
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const work = useActiveWork({ enabled: Boolean(account) })
+  const historyQuery = useAccountHistory(account?.id ?? null)
+
   if (!account) return <Dialog open={false} onClose={onClose} title="" />
 
   const access = accessOf(account)
   const first = account.name.split(' ')[0]
-  const history = staffActivityFor(state, account.id).slice(0, 3)
+  const history = historyQuery.data ?? []
+  const packages = work.data ?? []
   const locked = account.id === me.id ? 'You can’t change your own role or access.' : account.role === 'admin' ? 'Admin accounts are managed in the Supabase SQL editor, not in the app.' : null
-  const blocker = access !== 'pending' && account.role !== role ? roleChangeBlocker(state, account) : null
-  const openWork = state.packages.filter((p) => isActive(p) && (p.editorId === account.id || p.responsibleManagerId === account.id)).length
+  const blocker = access !== 'pending' && account.role !== role ? roleChangeBlocker(packages, account) : null
+  const openWork = packages.filter((p) => isActive(p) && (p.editorId === account.id || p.responsibleManagerId === account.id)).length
 
   const run = async (command: () => ReturnType<typeof api.approveAccount>, success: string) => {
     setBusy(true)
@@ -91,7 +96,7 @@ export function StaffAccessDialog({ state, account, me, onClose }: StaffAccessDi
           type="button"
           disabled={busy}
           className={buttonClasses('danger')}
-          onClick={() => run(() => api.deactivateAccount(me.id, account.id), `${account.name} was deactivated`)}
+          onClick={() => run(() => api.deactivateAccount(account.id), `${account.name} was deactivated`)}
         >
           {busy ? 'Deactivating…' : `Deactivate ${first}`}
         </button>
@@ -111,7 +116,7 @@ export function StaffAccessDialog({ state, account, me, onClose }: StaffAccessDi
           type="button"
           disabled={busy}
           className={buttonClasses('primary')}
-          onClick={() => run(() => api.approveAccount(me.id, account.id, role), `${account.name} is now an active ${role}`)}
+          onClick={() => run(() => api.approveAccount(account.id, role), `${account.name} is now an active ${role}`)}
         >
           {busy ? 'Approving…' : `Approve as ${ROLE_META[role].label.toLowerCase()}`}
         </button>
@@ -144,7 +149,7 @@ export function StaffAccessDialog({ state, account, me, onClose }: StaffAccessDi
           type="button"
           disabled={busy || role === initialRole || Boolean(blocker)}
           className={buttonClasses('primary')}
-          onClick={() => run(() => api.changeStaffRole(me.id, account.id, role), `${account.name} is now ${role === 'editor' ? 'an editor' : 'a manager'}`)}
+          onClick={() => run(() => api.changeStaffRole(account.id, role), `${account.name} is now ${role === 'editor' ? 'an editor' : 'a manager'}`)}
         >
           {busy ? 'Saving…' : role === initialRole ? 'Choose a new role' : `Change to ${ROLE_META[role].label.toLowerCase()}`}
         </button>
@@ -163,7 +168,7 @@ export function StaffAccessDialog({ state, account, me, onClose }: StaffAccessDi
           type="button"
           disabled={busy}
           className={buttonClasses('primary')}
-          onClick={() => run(() => api.reactivateAccount(me.id, account.id), `${account.name} was reactivated`)}
+          onClick={() => run(() => api.reactivateAccount(account.id), `${account.name} was reactivated`)}
         >
           {busy ? 'Reactivating…' : `Reactivate ${first}`}
         </button>
@@ -201,7 +206,7 @@ export function StaffAccessDialog({ state, account, me, onClose }: StaffAccessDi
         <div>
           <p className="mb-1 text-xs font-semibold tracking-wide text-muted-fg uppercase">Recent history</p>
           <div className="-mx-5 border-y border-border">
-            <StaffActivityList state={state} entries={history} label={`${account.name}’s recent account history`} />
+            <StaffActivityList accounts={accounts} entries={history} label={`${account.name}’s recent account history`} />
           </div>
         </div>
       )}

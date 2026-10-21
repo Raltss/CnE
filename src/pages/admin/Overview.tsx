@@ -7,45 +7,55 @@ import { ViewOnlyBanner } from '../../components/domain/ViewOnlyBanner'
 import { Callout } from '../../components/ui/Callout'
 import { Dialog } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { PageStatus } from '../../components/ui/PageStatus'
 import { PageHeader, Section } from '../../components/ui/Section'
-import { useAppState, useNow } from '../../data/hooks'
-import {
-  accessOf,
-  byDeadline,
-  currentlyClockedIn,
-  editorWorkload,
-  isActive,
-  isOverdue,
-  makeLookup,
-  managerLoad,
-  sessionDurationMs,
-} from '../../data/selectors'
-import type { WorkPackage } from '../../data/types'
+import { useNow } from '../../data/hooks'
+import { pageStatus, useAccounts, useActiveWork, useDirectory, useOpenSessions, useRecentDecisions } from '../../data/queries'
+import { accessOf, editorWorkload, isActive, isOverdue, managerLoad, reviewQueue, sessionDurationMs } from '../../data/selectors'
+import type { PackageSummary } from '../../data/types'
 import { buttonClasses } from '../../lib/styles'
 import { formatDate, formatDuration, formatTime } from '../../lib/time'
-import { reviewQueue } from '../manager/reviewQueue'
 
 type Drill = 'active' | 'overdue' | 'review'
 
 /** Admin home: the whole team's work at a glance. Read-only; drill-downs open dialogs or person pages. */
 export function AdminOverview() {
-  const state = useAppState()
   const now = useNow()
-  const lookup = makeLookup(state)
   const [drill, setDrill] = useState<Drill | null>(null)
+  const work = useActiveWork()
+  const open = useOpenSessions()
+  const decisions = useRecentDecisions()
+  const accounts = useAccounts()
+  const { people, lookup, queries } = useDirectory()
+  // The header needs no data, so it shows right away; the rest waits for its queries.
+  const header = (
+    <>
+      <PageHeader title="Team overview" description={`${formatDate(now.toISOString())} · Everyone’s work at a glance.`} />
+      <ViewOnlyBanner />
+    </>
+  )
+  const status = pageStatus(work, open, decisions, accounts, ...queries)
+  if (status.pending || status.error)
+    return (
+      <>
+        {header}
+        <PageStatus {...status} />
+      </>
+    )
 
-  const active = state.packages.filter(isActive).sort(byDeadline)
+  // Current work is loaded completely, so these totals cover all of it.
+  const active = work.data!.filter(isActive)
   const overdue = active.filter((p) => isOverdue(p, now))
   // No manager is "first" for an admin, so the queue is simply oldest submission first.
-  const pending = reviewQueue(state, '')
-  const clockedIn = currentlyClockedIn(state)
-  const workload = editorWorkload(state, now)
+  const pending = reviewQueue(active, '')
+  const clockedIn = open.data!
+  const workload = editorWorkload(people, active, now)
   const maxLoad = Math.max(1, ...workload.map((w) => w.active))
-  const managersLoad = managerLoad(state, now)
-  const waiting = state.accounts.filter((a) => accessOf(a) === 'pending').length
+  const managersLoad = managerLoad(people, active, decisions.data!, now)
+  const waiting = accounts.data!.filter((a) => accessOf(a) === 'pending').length
   const busyEditors = workload.filter((w) => w.active > 0).length
 
-  const drills: Record<Drill, { title: string; description: string; packages: WorkPackage[]; to: string }> = {
+  const drills: Record<Drill, { title: string; description: string; packages: PackageSummary[]; to: string }> = {
     active: {
       title: 'Active packages',
       description: 'Assigned, in progress, submitted, or needing changes, soonest deadline first.',
@@ -64,8 +74,7 @@ export function AdminOverview() {
 
   return (
     <>
-      <PageHeader title="Team overview" description={`${formatDate(now.toISOString())} · Everyone’s work at a glance.`} />
-      <ViewOnlyBanner />
+      {header}
       {waiting > 0 && (
         <div className="mb-6">
           <Callout tone="warning" title={`${waiting} ${waiting === 1 ? 'account is' : 'accounts are'} waiting for approval`}>
@@ -266,7 +275,7 @@ export function AdminOverview() {
         {openDrill &&
           (openDrill.packages.length ? (
             <div className="-mx-5 border-y border-border">
-              <PackageList state={state} packages={openDrill.packages} now={now} label={openDrill.title} />
+              <PackageList lookup={lookup} packages={openDrill.packages} now={now} label={openDrill.title} />
             </div>
           ) : (
             <EmptyState icon={Inbox} title="Nothing here right now" compact />

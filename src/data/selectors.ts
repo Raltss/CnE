@@ -1,19 +1,25 @@
-// Read-only derivations over AppState. Kept free of React so they can be
-// reused (and later replaced by Supabase queries/views).
+// Pure helpers over loaded rows: no React and no network, so pages can combine
+// whatever their queries returned. The database does the filtering that limits
+// what each person may see (RLS); these only shape and count what came back.
 import { DAY_MS, HOUR_MS, manilaDateKey } from '../lib/time'
-import type { AppState, PackageStatus, Person, StaffAccount, WorkPackage } from './types'
+import type { PackageStatus, PackageSummary, Person, Product, RoundSummary, StaffAccount } from './types'
 
-const ACTIVE: ReadonlySet<PackageStatus> = new Set(['assigned', 'in_progress', 'submitted', 'apply_feedback'])
+/** Statuses that count as current work (workload, overdue, review queue). */
+export const ACTIVE_STATUSES: PackageStatus[] = ['assigned', 'in_progress', 'submitted', 'apply_feedback']
+/** Statuses a package can't leave without a manager reopening it: finished work, paged in history lists. */
+export const FINISHED_STATUSES: PackageStatus[] = ['completed', 'cancelled', 'archived']
 
-export const isActive = (pkg: WorkPackage) => ACTIVE.has(pkg.status)
+export const isActive = (pkg: Pick<PackageSummary, 'status'>) => ACTIVE_STATUSES.includes(pkg.status)
 
 /** Overdue is derived, not a status: past deadline while still active. */
-export const isOverdue = (pkg: WorkPackage, now: Date) => isActive(pkg) && new Date(pkg.deadline).getTime() < now.getTime()
+export const isOverdue = (pkg: PackageSummary, now: Date) => isActive(pkg) && new Date(pkg.deadline).getTime() < now.getTime()
 
-export const isDueWithin = (pkg: WorkPackage, now: Date, ms: number) => {
+export const isDueWithin = (pkg: PackageSummary, now: Date, ms: number) => {
   const left = new Date(pkg.deadline).getTime() - now.getTime()
   return isActive(pkg) && left >= 0 && left <= ms
 }
+
+export const byDeadline = (a: PackageSummary, b: PackageSummary) => a.deadline.localeCompare(b.deadline)
 
 export interface Lookup {
   person: (id: string) => Person | undefined
@@ -21,44 +27,28 @@ export interface Lookup {
   productName: (id: string) => string
 }
 
-export function makeLookup(s: AppState): Lookup {
-  const people = new Map(s.people.map((p) => [p.id, p]))
-  const products = new Map(s.products.map((p) => [p.id, p.name]))
+export function makeLookup(people: Person[], products: Product[]): Lookup {
+  const byId = new Map(people.map((p) => [p.id, p]))
+  const productNames = new Map(products.map((p) => [p.id, p.name]))
   return {
-    person: (id) => people.get(id),
-    personName: (id) => people.get(id)?.name ?? 'Unknown',
-    productName: (id) => products.get(id) ?? 'Unknown product',
+    person: (id) => byId.get(id),
+    personName: (id) => byId.get(id)?.name ?? 'Unknown',
+    productName: (id) => productNames.get(id) ?? 'Unknown product',
   }
 }
 
 /** Active managers and editors: the people who can be given work. */
-export const managers = (s: AppState) => s.people.filter((p) => p.role === 'manager' && p.isActive)
-export const editors = (s: AppState) => s.people.filter((p) => p.role === 'editor' && p.isActive)
+export const managers = (people: Person[]) => people.filter((p) => p.role === 'manager' && p.isActive)
+export const editors = (people: Person[]) => people.filter((p) => p.role === 'editor' && p.isActive)
 
-export const byDeadline = (a: WorkPackage, b: WorkPackage) => a.deadline.localeCompare(b.deadline)
-
-export function submissionsFor(s: AppState, packageId: string) {
-  return s.submissions.filter((x) => x.packageId === packageId).sort((a, b) => b.round - a.round)
+/** PRD default: a round can only be approved when it has a delivery link. */
+export function approvalBlocker(latest: RoundSummary | null): string | null {
+  if (!latest) return 'Nothing has been submitted yet.'
+  if (!latest.deliveryLink) return 'This round has no delivery link. Mark Apply Feedback so the editor can resubmit with one.'
+  return null
 }
 
-export function activityFor(s: AppState, packageId: string) {
-  return s.activity.filter((x) => x.packageId === packageId).sort((a, b) => b.at.localeCompare(a.at))
-}
-
-export function lastSubmittedAt(s: AppState, packageId: string): string | null {
-  return submissionsFor(s, packageId)[0]?.submittedAt ?? null
-}
-
-export function roundCount(s: AppState, packageId: string) {
-  return s.submissions.filter((x) => x.packageId === packageId).length
-}
-
-/** Who may open a package: managers, admins (read-only), or the currently assigned editor. RLS enforces the same rule. */
-export function canView(person: Person, pkg: WorkPackage) {
-  return person.role === 'manager' || person.role === 'admin' || pkg.editorId === person.id
-}
-
-// ── Package list filtering (URL-driven) ─────────────────────────────────────
+// ── Filtering current work (URL-driven) ─────────────────────────────────────
 
 export type DueFilter = '' | 'overdue' | '48h' | 'week'
 
@@ -73,24 +63,48 @@ export interface PackageFilters {
 
 export const EMPTY_FILTERS: PackageFilters = { q: '', product: '', editor: '', manager: '', status: '', due: '' }
 
-export function filterPackages(s: AppState, f: PackageFilters, now: Date) {
+/** Filters for finished work, which is paged from the server instead of filtered here. */
+export interface FinishedFilters {
+  q?: string
+  product?: string
+  editor?: string
+  manager?: string
+  createdBy?: string
+  status?: PackageStatus
+}
+
+/** Whether a status filter can only match current work, or only finished work. */
+export const showsActive = (f: PackageFilters) => !f.status || f.status === 'active' || ACTIVE_STATUSES.includes(f.status as PackageStatus)
+export const showsFinished = (f: PackageFilters) => !f.due && (!f.status || FINISHED_STATUSES.includes(f.status as PackageStatus))
+
+/** Applies the filters to the (complete) list of current packages, soonest deadline first. */
+export function filterActive(packages: PackageSummary[], f: PackageFilters, now: Date) {
   const q = f.q.trim().toLowerCase()
-  return s.packages
+  return packages
     .filter((p) => {
+      if (!isActive(p)) return false
       if (f.product && p.productId !== f.product) return false
       if (f.editor && p.editorId !== f.editor) return false
       if (f.manager && p.responsibleManagerId !== f.manager) return false
-      if (f.status === 'active' ? !isActive(p) : f.status && p.status !== f.status) return false
+      if (f.status && f.status !== 'active' && p.status !== f.status) return false
       if (f.due === 'overdue' && !isOverdue(p, now)) return false
       if (f.due === '48h' && !isDueWithin(p, now, 48 * HOUR_MS)) return false
       if (f.due === 'week' && !isDueWithin(p, now, 7 * DAY_MS)) return false
       if (q && !`${p.title} ${p.code}`.toLowerCase().includes(q)) return false
       return true
     })
+    .sort(byDeadline)
+}
+
+/** Submitted packages: the manager's own first, then oldest submission first. */
+export function reviewQueue(packages: PackageSummary[], managerId: string) {
+  return packages
+    .filter((p) => p.status === 'submitted')
     .sort((a, b) => {
-      // Active work first (by deadline), then finished work (most recent first).
-      if (isActive(a) !== isActive(b)) return isActive(a) ? -1 : 1
-      return isActive(a) ? byDeadline(a, b) : b.updatedAt.localeCompare(a.updatedAt)
+      const mineA = a.responsibleManagerId === managerId ? 0 : 1
+      const mineB = b.responsibleManagerId === managerId ? 0 : 1
+      if (mineA !== mineB) return mineA - mineB
+      return (a.latest?.submittedAt ?? '').localeCompare(b.latest?.submittedAt ?? '')
     })
 }
 
@@ -107,10 +121,10 @@ export interface EditorWorkload {
 }
 
 /** PRD: workload is the count of active packages per editor. */
-export function editorWorkload(s: AppState, now: Date): EditorWorkload[] {
-  return editors(s)
+export function editorWorkload(people: Person[], packages: PackageSummary[], now: Date): EditorWorkload[] {
+  return editors(people)
     .map((editor) => {
-      const mine = s.packages.filter((p) => p.editorId === editor.id && isActive(p))
+      const mine = packages.filter((p) => p.editorId === editor.id && isActive(p))
       return {
         editor,
         active: mine.length,
@@ -123,8 +137,6 @@ export function editorWorkload(s: AppState, now: Date): EditorWorkload[] {
     .sort((a, b) => b.active - a.active || a.editor.name.localeCompare(b.editor.name))
 }
 
-// ── Oversight (admin, read-only) ────────────────────────────────────────────
-
 export interface ManagerLoad {
   manager: Person
   /** Active packages they're responsible for. */
@@ -136,48 +148,39 @@ export interface ManagerLoad {
   decisions: number
 }
 
-export function managerLoad(s: AppState, now: Date): ManagerLoad[] {
-  return managers(s)
+/** `decisions` is every review decision of the last 30 days (one row each). */
+export function managerLoad(people: Person[], packages: PackageSummary[], decisions: Array<{ decidedById: string }>, now: Date): ManagerLoad[] {
+  return managers(people)
     .map((manager) => {
-      const mine = s.packages.filter((p) => p.responsibleManagerId === manager.id && isActive(p))
+      const mine = packages.filter((p) => p.responsibleManagerId === manager.id && isActive(p))
       return {
         manager,
         responsible: mine.length,
         awaitingReview: mine.filter((p) => p.status === 'submitted').length,
         overdue: mine.filter((p) => isOverdue(p, now)).length,
-        decisions: decisionsBy(s, manager.id).filter((d) => now.getTime() - new Date(d.decidedAt ?? 0).getTime() <= 30 * DAY_MS).length,
+        decisions: decisions.filter((d) => d.decidedById === manager.id).length,
       }
     })
     .sort((a, b) => b.awaitingReview - a.awaitingReview || a.manager.name.localeCompare(b.manager.name))
 }
 
-/** Rounds someone submitted, newest first. */
-export const submissionsBy = (s: AppState, personId: string) =>
-  s.submissions.filter((x) => x.submittedById === personId).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
-
-/** Rounds someone approved or sent back for changes, newest first. */
-export const decisionsBy = (s: AppState, personId: string) =>
-  s.submissions
-    .filter((x) => x.decidedById === personId && x.decidedAt)
-    .sort((a, b) => (b.decidedAt ?? '').localeCompare(a.decidedAt ?? ''))
-
 /** Account access: approved and active, waiting for a role, or deactivated. */
 export type Access = 'active' | 'pending' | 'deactivated'
 export const accessOf = (a: Pick<StaffAccount, 'role' | 'isActive'>): Access => (a.isActive ? 'active' : a.role ? 'deactivated' : 'pending')
 
-export function staffActivityFor(s: AppState, profileId?: string) {
-  return s.staffActivity.filter((x) => !profileId || x.profileId === profileId).sort((a, b) => b.at.localeCompare(a.at))
+/** Why an account can't switch roles right now, or null. The database repeats this check. */
+export function roleChangeBlocker(packages: PackageSummary[], account: StaffAccount): string | null {
+  if (!account.role || account.role === 'admin') return null
+  const open = packages.filter(
+    (p) => !FINISHED_STATUSES.includes(p.status) && (account.role === 'editor' ? p.editorId : p.responsibleManagerId) === account.id,
+  ).length
+  const count = `${open} open ${open === 1 ? 'package' : 'packages'}`
+  if (open > 0 && account.role === 'editor') return `Reassign ${account.name}’s ${count} to another editor first.`
+  if (open > 0) return `Make another manager responsible for ${account.name}’s ${count} first.`
+  return null
 }
 
 // ── Attendance ──────────────────────────────────────────────────────────────
-
-export function sessionsFor(s: AppState, personId: string) {
-  return s.attendance.filter((a) => a.personId === personId).sort((a, b) => b.clockIn.localeCompare(a.clockIn))
-}
-
-export function currentlyClockedIn(s: AppState) {
-  return s.attendance.filter((a) => a.clockOut === null).sort((a, b) => a.clockIn.localeCompare(b.clockIn))
-}
 
 /** Session length so far; sessions count toward their clock-in date. */
 export function sessionDurationMs(session: { clockIn: string; clockOut: string | null }, now: Date) {
@@ -192,11 +195,5 @@ export function totalDurationMs(sessions: Array<{ clockIn: string; clockOut: str
 export const crossesMidnight = (session: { clockIn: string; clockOut: string | null }, now: Date) =>
   manilaDateKey(session.clockIn) !== manilaDateKey(session.clockOut ?? now.toISOString())
 
-// ── Notifications ───────────────────────────────────────────────────────────
-
-export function notificationsFor(s: AppState, personId: string) {
-  return s.notifications.filter((n) => n.recipientId === personId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-}
-
-export const unreadCount = (s: AppState, personId: string) =>
-  s.notifications.filter((n) => n.recipientId === personId && !n.readAt).length
+export const withinDays = (iso: string | null, days: number, now: Date) =>
+  Boolean(iso) && now.getTime() - new Date(iso!).getTime() <= days * DAY_MS

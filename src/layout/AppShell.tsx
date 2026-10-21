@@ -1,25 +1,49 @@
 import { Bell, Clapperboard, Ellipsis, LogOut, UserRound } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { ClockPill } from '../components/domain/ClockControls'
 import { Dialog } from '../components/ui/Dialog'
-import { useAppState, useNow } from '../data/hooks'
-import { accessOf, isOverdue, unreadCount } from '../data/selectors'
-import { api, dataMode } from '../data/store'
-import type { AppState, Person } from '../data/types'
+import { PageStatus } from '../components/ui/PageStatus'
+import { api } from '../data/api'
+import { useNow } from '../data/hooks'
+import { useAccounts, useActiveWork, useUnreadCount } from '../data/queries'
+import { accessOf, isOverdue } from '../data/selectors'
+import type { PackageSummary, Person } from '../data/types'
 import { cx } from '../lib/styles'
 import { useSession } from '../session/context'
-import { DemoBar } from './DemoBar'
 import { HOME, MOBILE_TAB_LIMIT, NAV, type NavItem } from './nav'
 
-function badgeCount(item: NavItem, state: AppState, me: Person, now: Date) {
-  if (item.badge === 'notifications') return unreadCount(state, me.id)
-  if (item.badge === 'review') return state.packages.filter((p) => p.status === 'submitted').length
-  if (item.badge === 'changes') return state.packages.filter((p) => p.editorId === me.id && p.status === 'apply_feedback').length
-  if (item.badge === 'overdue') return state.packages.filter((p) => isOverdue(p, now)).length
-  if (item.badge === 'pending') return state.accounts.filter((a) => accessOf(a) === 'pending').length
-  return 0
+type BadgeCounts = Record<NonNullable<NavItem['badge']>, number>
+
+/**
+ * Nav badge numbers. Each comes from a small read (a count, or a summary of
+ * current work); `select` keeps the shell from re-rendering unless a number changes.
+ */
+function useBadgeCounts(me: Person, now: Date): BadgeCounts {
+  const doesWork = me.role !== 'admin'
+  const work = useActiveWork({
+    enabled: doesWork,
+    select: useCallback(
+      (rows: PackageSummary[]) => ({
+        review: rows.filter((p) => p.status === 'submitted').length,
+        changes: rows.filter((p) => p.editorId === me.id && p.status === 'apply_feedback').length,
+        overdue: rows.filter((p) => isOverdue(p, now)).length,
+      }),
+      [me.id, now],
+    ),
+  })
+  const unread = useUnreadCount(me.id, doesWork)
+  const accounts = useAccounts(me.role === 'admin')
+  return {
+    review: work.data?.review ?? 0,
+    changes: work.data?.changes ?? 0,
+    overdue: work.data?.overdue ?? 0,
+    notifications: unread.data ?? 0,
+    pending: accounts.data?.filter((a) => accessOf(a) === 'pending').length ?? 0,
+  }
 }
+
+const badgeCount = (item: NavItem, counts: BadgeCounts) => (item.badge ? counts[item.badge] : 0)
 
 function CountBadge({ count, label, className }: { count: number; label: string; className?: string }) {
   if (!count) return null
@@ -45,12 +69,12 @@ const BADGE_LABEL = {
 } as const
 
 export function AppShell() {
-  const state = useAppState()
   const { me, signOut } = useSession()
   const now = useNow()
   const doesWork = me.role !== 'admin'
   const items = NAV[me.role]
-  const unread = unreadCount(state, me.id)
+  const counts = useBadgeCounts(me, now)
+  const unread = counts.notifications
   // Keep the bottom bar at 5 tabs: the first 4 items plus "More" when there are extras.
   const overflow = items.length > MOBILE_TAB_LIMIT
   const tabs = overflow ? items.slice(0, MOBILE_TAB_LIMIT - 1) : items
@@ -72,7 +96,6 @@ export function AppShell() {
       >
         Skip to content
       </a>
-      {dataMode === 'demo' && <DemoBar />}
       <div className="flex flex-1">
         {/* Sidebar: icon rail on tablet, full on desktop */}
         <nav
@@ -89,7 +112,7 @@ export function AppShell() {
           <ul className="flex flex-1 flex-col gap-1 p-2">
             {items.map((item) => {
               const Icon = item.icon
-              const count = item.badge ? badgeCount(item, state, me, now) : 0
+              const count = badgeCount(item, counts)
               return (
                 <li key={item.to}>
                   <NavLink
@@ -134,16 +157,14 @@ export function AppShell() {
               <UserRound aria-hidden className="size-4" />
               Your account
             </NavLink>
-            {signOut && (
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                className="mt-1 inline-flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm font-medium text-muted-fg hover:bg-surface-2 hover:text-fg"
-              >
-                <LogOut aria-hidden className="size-4" />
-                Sign out
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="mt-1 inline-flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm font-medium text-muted-fg hover:bg-surface-2 hover:text-fg"
+            >
+              <LogOut aria-hidden className="size-4" />
+              Sign out
+            </button>
           </div>
         </nav>
 
@@ -186,22 +207,22 @@ export function AppShell() {
                   )}
                 </Link>
               )}
-              {signOut && (
-                <button
-                  type="button"
-                  onClick={() => void signOut()}
-                  aria-label="Sign out"
-                  title="Sign out"
-                  className="flex size-10 items-center justify-center rounded-full text-muted-fg hover:bg-surface-2 hover:text-fg lg:hidden"
-                >
-                  <LogOut aria-hidden className="size-5" />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                aria-label="Sign out"
+                title="Sign out"
+                className="flex size-10 items-center justify-center rounded-full text-muted-fg hover:bg-surface-2 hover:text-fg lg:hidden"
+              >
+                <LogOut aria-hidden className="size-5" />
+              </button>
             </div>
           </header>
 
           <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[1440px] flex-1 px-4 pt-5 pb-24 md:px-6 md:pb-10">
-            <Outlet />
+            <Suspense fallback={<PageStatus />}>
+              <Outlet />
+            </Suspense>
           </main>
         </div>
       </div>
@@ -211,7 +232,7 @@ export function AppShell() {
         <ul className={cx('grid', MOBILE_GRID[tabs.length + (overflow ? 1 : 0)])}>
           {tabs.map((item) => {
             const Icon = item.icon
-            const count = item.badge ? badgeCount(item, state, me, now) : 0
+            const count = badgeCount(item, counts)
             return (
               <li key={item.to}>
                 <NavLink to={item.to} className={({ isActive }) => cx(mobileTabClasses, isActive ? 'text-primary' : 'text-muted-fg')}>
@@ -224,7 +245,7 @@ export function AppShell() {
           })}
           {overflow && (
             <li>
-              <MoreMenu items={moreItems} state={state} me={me} now={now} />
+              <MoreMenu items={moreItems} counts={counts} />
             </li>
           )}
         </ul>
@@ -239,11 +260,11 @@ const MOBILE_GRID: Record<number, string> = { 1: 'grid-cols-1', 2: 'grid-cols-2'
 const mobileTabClasses = 'relative flex min-h-14 w-full flex-col items-center justify-center gap-0.5 text-[11px] font-semibold'
 
 /** Mobile-only overflow menu for nav items that don't fit in the bottom bar. */
-function MoreMenu({ items, state, me, now }: { items: NavItem[]; state: AppState; me: Person; now: Date }) {
+function MoreMenu({ items, counts }: { items: NavItem[]; counts: BadgeCounts }) {
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
   const active = items.some((item) => pathname.startsWith(item.to))
-  const hiddenCount = items.reduce((sum, item) => sum + (item.badge ? badgeCount(item, state, me, now) : 0), 0)
+  const hiddenCount = items.reduce((sum, item) => sum + badgeCount(item, counts), 0)
 
   return (
     <>
@@ -261,7 +282,7 @@ function MoreMenu({ items, state, me, now }: { items: NavItem[]; state: AppState
         <ul className="-mx-2 flex flex-col gap-1">
           {items.map((item) => {
             const Icon = item.icon
-            const count = item.badge ? badgeCount(item, state, me, now) : 0
+            const count = badgeCount(item, counts)
             return (
               <li key={item.to}>
                 <NavLink

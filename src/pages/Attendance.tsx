@@ -6,19 +6,20 @@ import { ClockCard } from '../components/domain/ClockControls'
 import { ViewOnlyBanner } from '../components/domain/ViewOnlyBanner'
 import { Callout } from '../components/ui/Callout'
 import { EmptyState } from '../components/ui/EmptyState'
+import { PageStatus } from '../components/ui/PageStatus'
 import { PageHeader, Section } from '../components/ui/Section'
-import { useAppState, useNow } from '../data/hooks'
-import { currentlyClockedIn, makeLookup, sessionDurationMs, sessionsFor } from '../data/selectors'
-import type { AppState } from '../data/types'
-import { DAY_MS, formatDuration, formatTime } from '../lib/time'
+import { useNow } from '../data/hooks'
+import { useDirectory, useOpenSessions, usePersonAttendance, useTeamAttendance } from '../data/queries'
+import { sessionDurationMs, withinDays } from '../data/selectors'
+import { formatDuration, formatTime } from '../lib/time'
 import { buttonClasses, cardClasses, cx, inputClasses } from '../lib/styles'
 import { useSession } from '../session/context'
 
+/** How far back the team table goes. */
+const TEAM_DAYS = 14
+
 export function Attendance() {
-  const state = useAppState()
-  const now = useNow()
   const { me } = useSession()
-  const mine = sessionsFor(state, me.id).filter((s) => now.getTime() - new Date(s.clockIn).getTime() <= 30 * DAY_MS)
 
   // Admins don't clock in; they see the team's records read-only.
   if (me.role === 'admin')
@@ -30,7 +31,7 @@ export function Attendance() {
         />
         <ViewOnlyBanner>Attendance is recorded by each manager and editor. Select someone in Team for their full history.</ViewOnlyBanner>
         <div className="flex min-w-0 flex-col gap-5">
-          <TeamAttendance state={state} now={now} />
+          <TeamAttendance />
         </div>
       </>
     )
@@ -60,32 +61,47 @@ export function Attendance() {
           </Callout>
         </div>
         <div className="flex min-w-0 flex-col gap-5 xl:col-span-2">
-          {me.role === 'manager' && <TeamAttendance state={state} now={now} />}
-          <Section title="My attendance" description="Last 30 days" flush>
-            <AttendanceTable state={state} sessions={mine} now={now} caption="My attendance, last 30 days" />
-          </Section>
+          {me.role === 'manager' && <TeamAttendance />}
+          <MyAttendance personId={me.id} />
         </div>
       </div>
     </>
   )
 }
 
-function TeamAttendance({ state, now }: { state: AppState; now: Date }) {
-  const lookup = makeLookup(state)
+function MyAttendance({ personId }: { personId: string }) {
+  const now = useNow()
+  const sessions = usePersonAttendance(personId)
+  const mine = (sessions.data ?? []).filter((s) => withinDays(s.clockIn, 30, now))
+  return (
+    <Section title="My attendance" description="Last 30 days" flush>
+      {sessions.isPending || sessions.error ? (
+        <PageStatus error={sessions.error?.message} retry={() => void sessions.refetch()} />
+      ) : (
+        <AttendanceTable sessions={mine} now={now} caption="My attendance, last 30 days" />
+      )}
+    </Section>
+  )
+}
+
+function TeamAttendance() {
+  const now = useNow()
+  const { people, lookup } = useDirectory()
   const [params, setParams] = useSearchParams()
   const person = params.get('person') ?? ''
   const uid = useId()
-  const open = currentlyClockedIn(state)
-  const team = state.attendance
-    .filter((s) => (!person || s.personId === person) && now.getTime() - new Date(s.clockIn).getTime() <= 14 * DAY_MS)
-    .sort((a, b) => b.clockIn.localeCompare(a.clockIn))
+  const open = useOpenSessions()
+  const team = useTeamAttendance(TEAM_DAYS)
+  const shown = (team.data ?? []).filter((s) => !person || s.personId === person)
 
   return (
     <>
-      <Section title={`Clocked in now (${open.length})`} flush>
-        {open.length ? (
+      <Section title={open.data ? `Clocked in now (${open.data.length})` : 'Clocked in now'} flush>
+        {open.isPending || open.error ? (
+          <PageStatus error={open.error?.message} retry={() => void open.refetch()} />
+        ) : open.data!.length ? (
           <ul className="divide-y divide-border">
-            {open.map((s) => (
+            {open.data!.map((s) => (
               <li key={s.id} className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm tabular-nums">
                 <span className="flex items-center gap-2 font-semibold">
                   <span aria-hidden className="size-2 rounded-full bg-success" />
@@ -103,7 +119,7 @@ function TeamAttendance({ state, now }: { state: AppState; now: Date }) {
       </Section>
       <Section
         title="Team attendance"
-        description="Last 14 days"
+        description={`Last ${TEAM_DAYS} days`}
         flush
         actions={
           <div className="flex items-center gap-2">
@@ -117,7 +133,7 @@ function TeamAttendance({ state, now }: { state: AppState; now: Date }) {
               className={`${inputClasses()} min-h-9 w-auto py-1`}
             >
               <option value="">Everyone</option>
-              {state.people
+              {people
                 .filter((p) => p.role !== 'admin')
                 .map((p) => (
                   <option key={p.id} value={p.id}>
@@ -128,7 +144,11 @@ function TeamAttendance({ state, now }: { state: AppState; now: Date }) {
           </div>
         }
       >
-        <AttendanceTable state={state} sessions={team} now={now} showPerson caption="Team attendance, last 14 days" />
+        {team.isPending || team.error ? (
+          <PageStatus error={team.error?.message} retry={() => void team.refetch()} />
+        ) : (
+          <AttendanceTable lookup={lookup} sessions={shown} now={now} showPerson caption={`Team attendance, last ${TEAM_DAYS} days`} />
+        )}
       </Section>
     </>
   )

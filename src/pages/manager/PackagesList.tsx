@@ -1,13 +1,24 @@
-import { FilterX, FolderSearch, PackagePlus, Plus } from 'lucide-react'
+import { FilterX, PackagePlus, Plus } from 'lucide-react'
 import { useId, useState } from 'react'
-import { AddProductDialog } from '../../components/domain/AddProductDialog'
 import { Link, useSearchParams } from 'react-router'
-import { PackageTable } from '../../components/domain/PackageTable'
+import { AddProductDialog } from '../../components/domain/AddProductDialog'
+import { PackageSections } from '../../components/domain/PackageSections'
 import { ViewOnlyBanner } from '../../components/domain/ViewOnlyBanner'
-import { EmptyState } from '../../components/ui/EmptyState'
-import { PageHeader, Section } from '../../components/ui/Section'
-import { useAppState, useNow } from '../../data/hooks'
-import { EMPTY_FILTERS, editors, filterPackages, managers, type PackageFilters } from '../../data/selectors'
+import { PageStatus } from '../../components/ui/PageStatus'
+import { PageHeader } from '../../components/ui/Section'
+import { useDebouncedValue, useNow } from '../../data/hooks'
+import { pageStatus, useActiveWork, useDirectory } from '../../data/queries'
+import {
+  EMPTY_FILTERS,
+  FINISHED_STATUSES,
+  editors,
+  filterActive,
+  managers,
+  showsActive,
+  showsFinished,
+  type PackageFilters,
+} from '../../data/selectors'
+import type { PackageStatus } from '../../data/types'
 import { STATUS_META, WORKFLOW_STATUSES } from '../../lib/status'
 import { buttonClasses, inputClasses } from '../../lib/styles'
 import { useSession } from '../../session/context'
@@ -21,7 +32,6 @@ function readFilters(params: URLSearchParams): PackageFilters {
 }
 
 export function PackagesList() {
-  const state = useAppState()
   const now = useNow()
   const { me } = useSession()
   // Admins see the same list read-only: no create or edit actions.
@@ -29,9 +39,12 @@ export function PackagesList() {
   const [addingProduct, setAddingProduct] = useState<number | null>(null)
   const [params, setParams] = useSearchParams()
   const filters = readFilters(params)
-  const results = filterPackages(state, filters, now)
+  // The search box queries the server for finished work; wait until typing pauses.
+  const search = useDebouncedValue(filters.q)
   const uid = useId()
   const activeCount = KEYS.filter((k) => filters[k]).length
+  const work = useActiveWork()
+  const { people, products, lookup, queries } = useDirectory()
 
   // Filters live in the URL so every filtered view can be linked and bookmarked.
   const set = (key: keyof PackageFilters, value: string) => {
@@ -41,6 +54,7 @@ export function PackagesList() {
     setParams(next, { replace: true })
   }
 
+  const status = pageStatus(work, ...queries)
   const select = (key: keyof PackageFilters, label: string, options: Array<{ value: string; label: string }>, all: string) => (
     <div className="min-w-0">
       <label htmlFor={`${uid}-${key}`} className="mb-1 block text-xs font-semibold text-muted-fg">
@@ -95,15 +109,15 @@ export function PackagesList() {
             className={inputClasses()}
           />
         </div>
-        {select('product', 'Product', state.products.map((p) => ({ value: p.id, label: p.name })), 'All products')}
-        {select('editor', 'Editor', editors(state).map((p) => ({ value: p.id, label: p.name })), 'All editors')}
+        {select('product', 'Product', products.map((p) => ({ value: p.id, label: p.name })), 'All products')}
+        {select('editor', 'Editor', editors(people).map((p) => ({ value: p.id, label: p.name })), 'All editors')}
         {select(
           'status',
           'Status',
           [{ value: 'active', label: 'All active' }, ...WORKFLOW_STATUSES.map((s) => ({ value: s, label: STATUS_META[s].label }))],
           'Any status',
         )}
-        {select('manager', 'Responsible manager', managers(state).map((p) => ({ value: p.id, label: p.name })), 'Any manager')}
+        {select('manager', 'Responsible manager', managers(people).map((p) => ({ value: p.id, label: p.name })), 'Any manager')}
         {select(
           'due',
           'Deadline',
@@ -115,50 +129,45 @@ export function PackagesList() {
           'Any deadline',
         )}
       </form>
+      {activeCount > 0 && (
+        <div className="mb-4 flex justify-end">
+          <button type="button" className={buttonClasses('ghost', 'sm')} onClick={() => setParams({}, { replace: true })}>
+            <FilterX aria-hidden className="size-4" />
+            Clear {activeCount} {activeCount === 1 ? 'filter' : 'filters'}
+          </button>
+        </div>
+      )}
 
-      <Section
-        title={`${results.length} ${results.length === 1 ? 'package' : 'packages'}`}
-        description={activeCount ? `${activeCount} filter${activeCount > 1 ? 's' : ''} applied` : 'Active work first, by deadline'}
-        flush
-        actions={
-          activeCount > 0 && (
-            <button type="button" className={buttonClasses('ghost', 'sm')} onClick={() => setParams({}, { replace: true })}>
-              <FilterX aria-hidden className="size-4" />
-              Clear filters
-            </button>
-          )
-        }
-      >
-        {results.length ? (
-          <PackageTable
-            state={state}
-            packages={results}
-            now={now}
-            caption="Packages"
-            columns={['package', 'product', 'editor', 'manager', 'status', 'deadline']}
-            action={(pkg) =>
-              canManage &&
-              pkg.status !== 'completed' && (
-                <Link to={`/packages/${pkg.id}/edit`} className={buttonClasses('secondary', 'sm')} aria-label={`Edit ${pkg.title}`}>
-                  Edit
-                </Link>
-              )
-            }
-          />
-        ) : (
-          <EmptyState
-            icon={FolderSearch}
-            title="No packages match these filters"
-            action={
-              <button type="button" className={buttonClasses('secondary')} onClick={() => setParams({}, { replace: true })}>
-                Clear filters
-              </button>
-            }
-          >
-            Try a different product, editor, or status.
-          </EmptyState>
-        )}
-      </Section>
+      {status.pending || status.error ? (
+        <PageStatus {...status} />
+      ) : (
+        <PackageSections
+          lookup={lookup}
+          now={now}
+          active={showsActive(filters) ? filterActive(work.data!, filters, now) : null}
+          finished={
+            showsFinished(filters)
+              ? {
+                  q: search,
+                  product: filters.product,
+                  editor: filters.editor,
+                  manager: filters.manager,
+                  status: FINISHED_STATUSES.includes(filters.status as PackageStatus) ? (filters.status as PackageStatus) : undefined,
+                }
+              : null
+          }
+          caption="Packages"
+          columns={['package', 'product', 'editor', 'manager', 'status', 'deadline']}
+          emptyHint="Try a different product, editor, or status."
+          action={(pkg) =>
+            canManage && (
+              <Link to={`/packages/${pkg.id}/edit`} className={buttonClasses('secondary', 'sm')} aria-label={`Edit ${pkg.title}`}>
+                Edit
+              </Link>
+            )
+          }
+        />
+      )}
       {addingProduct !== null && <AddProductDialog key={addingProduct} open onClose={() => setAddingProduct(null)} />}
     </>
   )

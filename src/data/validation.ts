@@ -1,4 +1,4 @@
-import type { AppState, FieldErrors, PackageInput, StaffAccountInput, SubmissionInput } from './types'
+import type { FieldErrors, PackageInput, Person, Product, StaffAccount, StaffAccountInput, SubmissionInput } from './types'
 
 export function isHttpUrl(value: string): boolean {
   try {
@@ -13,8 +13,9 @@ const URL_HINT = 'Enter a full link starting with https://'
 
 export type PackageField = keyof PackageInput | `referenceLinks.${number}`
 
+/** Same rules as private.validate_package(); the database checks them again. */
 export function validatePackageInput(
-  state: AppState,
+  directory: { people: Person[]; products: Product[] },
   input: PackageInput,
   options: { previousDeadline?: string; now: Date },
 ): FieldErrors<PackageField> {
@@ -23,16 +24,16 @@ export function validatePackageInput(
   if (!title) errors.title = 'Title is required.'
   else if (title.length > 120) errors.title = 'Keep the title under 120 characters.'
 
-  if (!state.products.some((p) => p.id === input.productId)) errors.productId = 'Choose a product.'
+  if (!directory.products.some((p) => p.id === input.productId)) errors.productId = 'Choose a product.'
 
   if (input.briefLink.trim() && !isHttpUrl(input.briefLink.trim())) errors.briefLink = URL_HINT
   input.referenceLinks.forEach((link, index) => {
     if (link.trim() && !isHttpUrl(link.trim())) errors[`referenceLinks.${index}`] = URL_HINT
   })
 
-  const editor = state.people.find((p) => p.id === input.editorId)
+  const editor = directory.people.find((p) => p.id === input.editorId)
   if (!editor || editor.role !== 'editor') errors.editorId = 'Choose the editor for this package.'
-  const manager = state.people.find((p) => p.id === input.responsibleManagerId)
+  const manager = directory.people.find((p) => p.id === input.responsibleManagerId)
   if (!manager || manager.role !== 'manager') errors.responsibleManagerId = 'Choose a responsible manager.'
 
   if (!input.deadline) errors.deadline = 'Set the final deadline.'
@@ -58,11 +59,11 @@ export function validateSubmissionInput(input: SubmissionInput): FieldErrors<key
 // ── Products ────────────────────────────────────────────────────────────────
 
 /** Same rules as public.create_product(): a name of up to 80 characters, unique ignoring case. */
-export function validateProductName(state: AppState, name: string): string | undefined {
+export function validateProductName(products: Product[], name: string): string | undefined {
   const clean = name.trim()
   if (!clean) return 'Enter the product name.'
   if (clean.length > 80) return 'Keep the product name under 80 characters.'
-  if (state.products.some((p) => p.name.trim().toLowerCase() === clean.toLowerCase())) return `A product called “${clean}” already exists.`
+  if (products.some((p) => p.name.trim().toLowerCase() === clean.toLowerCase())) return `A product called “${clean}” already exists.`
   return undefined
 }
 
@@ -81,14 +82,14 @@ function passwordError(password: string): string | undefined {
 }
 
 /** Same rules as supabase/functions/create-staff-account, plus a duplicate-email hint. */
-export function validateStaffAccountInput(state: AppState, input: StaffAccountInput): FieldErrors<keyof StaffAccountInput> {
+export function validateStaffAccountInput(accounts: StaffAccount[], input: StaffAccountInput): FieldErrors<keyof StaffAccountInput> {
   const errors: FieldErrors<keyof StaffAccountInput> = {}
   const name = input.fullName.trim()
   const email = input.email.trim().toLowerCase()
   if (!name) errors.fullName = 'Enter their full name.'
   else if (name.length > 80) errors.fullName = 'Keep the name under 80 characters.'
   if (!EMAIL.test(email)) errors.email = 'Enter a valid email address.'
-  else if (state.accounts.some((a) => a.email.toLowerCase() === email)) errors.email = 'An account with this email already exists.'
+  else if (accounts.some((a) => a.email.toLowerCase() === email)) errors.email = 'An account with this email already exists.'
   if (input.title.trim().length > 80) errors.title = 'Keep the title under 80 characters.'
   if (input.role !== 'manager' && input.role !== 'editor') errors.role = 'Choose manager or editor.'
   const password = passwordError(input.password)

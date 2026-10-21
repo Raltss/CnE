@@ -1,17 +1,13 @@
 import { PasswordForm } from '../components/domain/PasswordForm'
 import { RoleBadge } from '../components/domain/StatusBadge'
-import { Callout } from '../components/ui/Callout'
 import { PageHeader, Section } from '../components/ui/Section'
 import { useToast } from '../components/ui/toast-context'
-import { useAppState } from '../data/hooks'
 import { useSession } from '../session/context'
 
 /** Everyone: who you're signed in as, and changing your password. */
 export function Account() {
-  const { me, changePassword } = useSession()
-  const { accounts } = useAppState()
+  const { me, email, changePassword } = useSession()
   const toast = useToast()
-  const email = accounts.find((a) => a.id === me.id)?.email
 
   return (
     <>
@@ -45,19 +41,13 @@ export function Account() {
         </Section>
 
         <Section title="Change password" description="You’ll stay signed in on this device." className="lg:col-span-3">
-          {changePassword ? (
-            <PasswordForm
-              askCurrent
-              idPrefix="account-password"
-              submitLabel="Change password"
-              onSubmit={changePassword}
-              onSuccess={() => toast.show('Password changed')}
-            />
-          ) : (
-            <Callout tone="info" title="No passwords in the demo">
-              The demo has no sign-in, so there’s no password to change. With Supabase, this is where you change yours.
-            </Callout>
-          )}
+          <PasswordForm
+            askCurrent
+            idPrefix="account-password"
+            submitLabel="Change password"
+            onSubmit={changePassword}
+            onSuccess={() => toast.show('Password changed')}
+          />
         </Section>
       </div>
     </>

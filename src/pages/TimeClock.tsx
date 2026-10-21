@@ -3,19 +3,21 @@ import { Link } from 'react-router'
 import { AttendanceTable } from '../components/domain/AttendanceTable'
 import { ClockPanel } from '../components/domain/ClockControls'
 import { KpiStat } from '../components/domain/KpiStat'
+import { PageStatus } from '../components/ui/PageStatus'
 import { PageHeader, Section } from '../components/ui/Section'
-import { useAppState, useNow } from '../data/hooks'
-import { sessionDurationMs, sessionsFor } from '../data/selectors'
-import { DAY_MS, formatDuration, manilaDateKey } from '../lib/time'
+import { useNow } from '../data/hooks'
+import { usePersonAttendance } from '../data/queries'
+import { sessionDurationMs, withinDays } from '../data/selectors'
+import { formatDuration, manilaDateKey } from '../lib/time'
 import { useSession } from '../session/context'
 
 /** Personal clock-in/out with a short summary of the current week. */
 export function TimeClock() {
-  const state = useAppState()
   const now = useNow()
   const { me } = useSession()
+  const sessions = usePersonAttendance(me.id)
   const today = manilaDateKey(now.toISOString())
-  const week = sessionsFor(state, me.id).filter((s) => now.getTime() - new Date(s.clockIn).getTime() <= 7 * DAY_MS)
+  const week = (sessions.data ?? []).filter((s) => withinDays(s.clockIn, 7, now))
   // Sessions count toward their clock-in date, including overnight ones.
   const todayMs = week.filter((s) => manilaDateKey(s.clockIn) === today).reduce((sum, s) => sum + sessionDurationMs(s, now), 0)
   const weekMs = week.reduce((sum, s) => sum + sessionDurationMs(s, now), 0)
@@ -43,7 +45,11 @@ export function TimeClock() {
               </Link>
             }
           >
-            <AttendanceTable state={state} sessions={week} now={now} caption="My sessions, last 7 days" />
+            {sessions.isPending || sessions.error ? (
+              <PageStatus error={sessions.error?.message} retry={() => void sessions.refetch()} />
+            ) : (
+              <AttendanceTable sessions={week} now={now} caption="My sessions, last 7 days" />
+            )}
           </Section>
         </div>
       </div>

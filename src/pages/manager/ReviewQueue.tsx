@@ -2,19 +2,25 @@ import { Hourglass } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 import { PackageTable } from '../../components/domain/PackageTable'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { PageStatus } from '../../components/ui/PageStatus'
 import { PageHeader, Section } from '../../components/ui/Section'
-import { useAppState, useNow } from '../../data/hooks'
+import { useNow } from '../../data/hooks'
+import { pageStatus, useActiveWork, useDirectory } from '../../data/queries'
+import { reviewQueue } from '../../data/selectors'
 import { buttonClasses, cx } from '../../lib/styles'
 import { useSession } from '../../session/context'
-import { reviewQueue } from './reviewQueue'
 
 export function ReviewQueue() {
-  const state = useAppState()
   const now = useNow()
   const { me } = useSession()
   const [params, setParams] = useSearchParams()
+  const work = useActiveWork()
+  const { lookup, queries } = useDirectory()
+  const status = pageStatus(work, ...queries)
+  if (status.pending || status.error) return <PageStatus {...status} />
+
   const scope = params.get('scope') === 'mine' ? 'mine' : 'all'
-  const all = reviewQueue(state, me.id)
+  const all = reviewQueue(work.data!, me.id)
   const items = scope === 'mine' ? all.filter((p) => p.responsibleManagerId === me.id) : all
   const mineCount = all.filter((p) => p.responsibleManagerId === me.id).length
 
@@ -51,7 +57,7 @@ export function ReviewQueue() {
       >
         {items.length ? (
           <PackageTable
-            state={state}
+            lookup={lookup}
             packages={items}
             now={now}
             caption="Submitted packages awaiting review"

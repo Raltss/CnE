@@ -1,10 +1,9 @@
 import { Check, Clapperboard, ExternalLink, RotateCcw, Truck } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { makeLookup } from '../../data/selectors'
-import { api } from '../../data/store'
-import type { AppState, Person, WorkPackage } from '../../data/types'
-import { approvalBlocker, latestSubmission } from '../../data/workflow'
+import { api } from '../../data/api'
+import { approvalBlocker, type Lookup } from '../../data/selectors'
+import type { PackageSummary } from '../../data/types'
 import { buttonClasses, fieldAria, inputClasses } from '../../lib/styles'
 import { formatDateTime } from '../../lib/time'
 import { Callout } from '../ui/Callout'
@@ -17,10 +16,9 @@ import { LinkField } from './LinkField'
 type Mode = 'review' | 'approve' | 'feedback'
 
 interface ReviewDialogProps {
-  state: AppState
-  /** The submitted package to review; the dialog is closed when null. */
-  pkg: WorkPackage | null
-  me: Person
+  lookup: Lookup
+  /** The submitted package to review (with its latest round); the dialog is closed when null. */
+  pkg: PackageSummary | null
   now: Date
   onClose: () => void
 }
@@ -30,7 +28,7 @@ interface ReviewDialogProps {
  * then approve or mark Apply Feedback. One dialog that steps between views,
  * so there are never two modals stacked.
  */
-export function ReviewDialog({ state, pkg, me, now, onClose }: ReviewDialogProps) {
+export function ReviewDialog({ lookup, pkg, now, onClose }: ReviewDialogProps) {
   const toast = useToast()
   const [mode, setMode] = useState<Mode>('review')
   const [note, setNote] = useState('')
@@ -46,21 +44,20 @@ export function ReviewDialog({ state, pkg, me, now, onClose }: ReviewDialogProps
 
   if (!pkg) return <Dialog open={false} onClose={close} title="Review" />
 
-  const lookup = makeLookup(state)
-  const latest = latestSubmission(state, pkg.id)
-  const blocker = approvalBlocker(state, pkg)
+  const latest = pkg.latest
+  const blocker = approvalBlocker(latest)
   const editorName = lookup.personName(pkg.editorId)
 
   const approve = async () => {
     setBusy(true)
-    const r = await api.approve(me.id, pkg.id)
+    const r = await api.approve(pkg.id)
     setBusy(false)
     toast.show(r.ok ? `Approved. ${editorName} has been notified.` : r.error, r.ok ? 'success' : 'error')
     if (r.ok) close()
   }
   const sendFeedback = async () => {
     setBusy(true)
-    const r = await api.requestFeedback(me.id, pkg.id, note)
+    const r = await api.requestFeedback(pkg.id, note)
     setBusy(false)
     if (!r.ok) {
       setNoteError(r.fieldErrors?.note ?? r.error)

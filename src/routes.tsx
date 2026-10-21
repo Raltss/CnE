@@ -1,24 +1,32 @@
+import { lazy, type ComponentType } from 'react'
 import type { RouteObject } from 'react-router'
 import { AppShell } from './layout/AppShell'
-import { Account } from './pages/Account'
-import { Attendance } from './pages/Attendance'
-import { History } from './pages/editor/History'
-import { MyWork } from './pages/editor/MyWork'
-import { NeedsChanges } from './pages/editor/NeedsChanges'
-import { ManagerDashboard } from './pages/manager/Dashboard'
-import { Deadlines } from './pages/manager/Deadlines'
-import { PackageFormPage } from './pages/manager/PackageForm'
-import { PackagesList } from './pages/manager/PackagesList'
-import { ReviewQueue } from './pages/manager/ReviewQueue'
-import { NotFound } from './pages/NotFound'
-import { Notifications } from './pages/Notifications'
-import { PackageDetail } from './pages/PackageDetail'
 import { AdminOverview } from './pages/admin/Overview'
-import { PersonDetail } from './pages/admin/PersonDetail'
-import { Staff } from './pages/admin/Staff'
-import { Team } from './pages/admin/Team'
+import { MyWork } from './pages/editor/MyWork'
+import { ManagerDashboard } from './pages/manager/Dashboard'
+import { NotFound } from './pages/NotFound'
 import { RoleGuard, RoleHome } from './pages/RoleGuard'
-import { TimeClock } from './pages/TimeClock'
+
+// The three home pages ship with the app, since nearly every visit starts on one.
+// Every other page is its own download, fetched the first time it's opened;
+// AppShell shows the navigation right away and a loading state while it arrives.
+const page = <T extends Record<string, unknown>>(load: () => Promise<T>, name: keyof T) =>
+  lazy(() => load().then((module) => ({ default: module[name] as ComponentType })))
+
+const ReviewQueue = page(() => import('./pages/manager/ReviewQueue'), 'ReviewQueue')
+const Deadlines = page(() => import('./pages/manager/Deadlines'), 'Deadlines')
+const PackagesList = page(() => import('./pages/manager/PackagesList'), 'PackagesList')
+const PackageFormPage = page(() => import('./pages/manager/PackageForm'), 'PackageFormPage')
+const NeedsChanges = page(() => import('./pages/editor/NeedsChanges'), 'NeedsChanges')
+const History = page(() => import('./pages/editor/History'), 'History')
+const PackageDetail = page(() => import('./pages/PackageDetail'), 'PackageDetail')
+const TimeClock = page(() => import('./pages/TimeClock'), 'TimeClock')
+const Attendance = page(() => import('./pages/Attendance'), 'Attendance')
+const Notifications = page(() => import('./pages/Notifications'), 'Notifications')
+const Account = page(() => import('./pages/Account'), 'Account')
+const Team = page(() => import('./pages/admin/Team'), 'Team')
+const PersonDetail = page(() => import('./pages/admin/PersonDetail'), 'PersonDetail')
+const Staff = page(() => import('./pages/admin/Staff'), 'Staff')
 
 export const routes: RouteObject[] = [
   {

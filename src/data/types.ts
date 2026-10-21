@@ -48,25 +48,43 @@ export type PackageStatus =
   | 'cancelled'
   | 'archived'
 
-export interface WorkPackage {
+/** A package as lists show it: no long text fields, plus its latest submission round. */
+export interface PackageSummary {
   id: string
   /** Human-friendly reference shown in tables, e.g. PKG-1042. */
   code: string
   title: string
   productId: string
-  description: string
-  briefLink: string
-  referenceLinks: string[]
-  deliverables: string
   editorId: string
   responsibleManagerId: string
   /** ISO instant; entered and displayed in Asia/Manila. */
   deadline: string
   status: PackageStatus
-  createdAt: string
   createdById: string
   updatedAt: string
   completedAt: string | null
+  /** The newest round, or null before the first submission. */
+  latest: RoundSummary | null
+}
+
+/** One package with everything the detail page and the edit form show. */
+export interface WorkPackage extends PackageSummary {
+  description: string
+  briefLink: string
+  referenceLinks: string[]
+  deliverables: string
+  createdAt: string
+}
+
+/** The parts of a round that lists and the review dialog need. */
+export interface RoundSummary {
+  round: number
+  submittedAt: string
+  reviewLink: string | null
+  deliveryLink: string | null
+  outcome: SubmissionOutcome
+  decidedById: string | null
+  feedbackNote: string | null
 }
 
 export type SubmissionOutcome = 'pending' | 'feedback' | 'approved'
@@ -97,6 +115,11 @@ export type ActivityType =
   | 'deadline_changed'
   | 'manager_changed'
   | 'edited'
+
+/** A round listed across packages (a person's submissions or review decisions). */
+export interface RoundWithPackage extends Submission {
+  package: { id: string; title: string; code: string } | null
+}
 
 export interface ActivityEvent {
   id: string
@@ -153,25 +176,17 @@ export interface AppNotification {
   readAt: string | null
 }
 
-/** Everything the signed-in person is allowed to read. */
-export interface AppState {
-  people: Person[]
-  accounts: StaffAccount[]
-  products: Product[]
-  packages: WorkPackage[]
-  submissions: Submission[]
+/** A package with every round (newest first) and its activity history (newest first). */
+export interface PackageDetail {
+  pkg: WorkPackage
+  rounds: Submission[]
   activity: ActivityEvent[]
-  attendance: AttendanceSession[]
-  notifications: AppNotification[]
-  /** Empty for everyone except admins (RLS). */
-  staffActivity: StaffActivity[]
 }
 
-/** The localStorage demo keeps a little extra bookkeeping. */
-export interface DemoState extends AppState {
-  version: number
-  seededAt: string
-  nextPackageNumber: number
+/** One page of a long list, with the total number of matching rows. */
+export interface Page<T> {
+  rows: T[]
+  total: number
 }
 
 export interface PackageInput {

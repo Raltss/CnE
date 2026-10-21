@@ -11,8 +11,8 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react'
-import { activityFor, makeLookup } from '../../data/selectors'
-import type { ActivityType, AppState } from '../../data/types'
+import type { Lookup } from '../../data/selectors'
+import type { ActivityEvent, ActivityType } from '../../data/types'
 import { formatDateTime } from '../../lib/time'
 import { EmptyState } from '../ui/EmptyState'
 
@@ -28,9 +28,8 @@ const ICONS: Record<ActivityType, LucideIcon> = {
   edited: Pencil,
 }
 
-export function ActivityTimeline({ state, packageId }: { state: AppState; packageId: string }) {
-  const lookup = makeLookup(state)
-  const events = activityFor(state, packageId)
+/** `events` are newest first, as the package query returns them. */
+export function ActivityTimeline({ events, lookup }: { events: ActivityEvent[]; lookup: Lookup }) {
   if (!events.length) return <EmptyState icon={History} title="No activity yet" compact />
   return (
     <ol className="relative flex flex-col gap-4 before:absolute before:top-2 before:bottom-2 before:left-[15px] before:w-px before:bg-border">
