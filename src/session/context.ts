@@ -8,6 +8,8 @@ export interface AppSession {
   switchAccount: ((personId: string) => void) | null
   /** Real sign-in only: end the Supabase session. */
   signOut: (() => Promise<void>) | null
+  /** Real sign-in only: check the current password, then set a new one. Resolves to an error message, or null. */
+  changePassword: ((current: string, next: string) => Promise<string | null>) | null
 }
 
 export const SessionContext = createContext<AppSession | null>(null)

@@ -1,5 +1,6 @@
 import type { RouteObject } from 'react-router'
 import { AppShell } from './layout/AppShell'
+import { Account } from './pages/Account'
 import { Attendance } from './pages/Attendance'
 import { History } from './pages/editor/History'
 import { MyWork } from './pages/editor/MyWork'
@@ -24,6 +25,7 @@ export const routes: RouteObject[] = [
     element: <AppShell />,
     children: [
       { index: true, element: <RoleHome /> },
+      { path: 'account', element: <Account /> },
       {
         element: <RoleGuard roles={['manager']} />,
         children: [

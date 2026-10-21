@@ -2,7 +2,7 @@
 
 How CnE stores data, signs people in, and enforces who can do what. Setup steps are in [`supabase-setup.md`](supabase-setup.md). The requirements are in [`product-requirements.md`](product-requirements.md).
 
-Status (2026-10-21): the first four migrations appear to be applied on `cne-dev` (sign-in and the first-admin script work there; `npx supabase db push --dry-run` confirms). `20261021120000_admin_oversight.sql` (admin oversight and audited staff access) is ready but **not applied yet**.
+Status (2026-10-21): the first four migrations appear to be applied on `cne-dev` (sign-in and the first-admin script work there; `npx supabase db push --dry-run` confirms). `20261021120000_admin_oversight.sql`, `20261021130000_staff_accounts.sql`, and the `create-staff-account` Edge Function are ready but **not applied or deployed yet**.
 
 ---
 
@@ -11,7 +11,7 @@ Status (2026-10-21): the first four migrations appear to be applied on `cne-dev`
 | # | Topic | Decision |
 |---|---|---|
 | B1 | Sign-in method | **Supabase Auth, email + password.** Google OAuth is **deferred** and isn't a setup prerequisite (see §8). |
-| B2 | Account creation | **No public sign-up.** For initial testing, an admin creates users in the Supabase Dashboard. The invite Edge Function from the PRD comes later. |
+| B2 | Account creation | **No public sign-up.** Admins add managers and editors in the app (**Add user**): the `create-staff-account` Edge Function creates the confirmed account with a **temporary password** (no email), using the service role on the server only. The person must choose their own password at first sign-in. Creating users in the Supabase Dashboard still works. |
 | B3 | Role assignment | The **first admin** is made in the SQL editor (`supabase/scripts/first-admin.sql`). After that, an admin approves accounts as manager or editor, switches between the two, and deactivates or reactivates them **in the app**, through audited functions (B11). `private.approve_staff(…)` still works in the SQL editor. Admin access is granted only in the SQL editor. |
 | B4 | Access gate | Only **approved, active** staff (a profile with a role and `is_active = true`) can read anything. New accounts start inactive with no role. |
 | B5 | Reads | **Row Level Security** on every table decides which rows each person can read. |
@@ -20,6 +20,8 @@ Status (2026-10-21): the first four migrations appear to be applied on `cne-dev`
 | B8 | Live updates | Supabase **Realtime** on packages, submissions, activity, attendance, and notifications. The app refetches on any change. Realtime applies RLS. |
 | B9 | Offline demo | The localStorage demo stays available behind `VITE_USE_DEMO_DATA=true`, for UI work without a backend. |
 | B10 | Admin oversight (2026-10-21) | Admins **read** everything managers read: clients, products, packages, submission rounds, activity, and attendance. They can't create, edit, review, submit, or clock in: the workflow functions still require the manager or editor role, and nobody writes tables directly. No impersonation: the admin always uses their own session. |
+| B12 | Add user (2026-10-21) | The Edge Function verifies the caller's token with Supabase Auth (`verify_jwt = false` in `config.toml`, so it works with the new signing keys), requires an active admin, validates the input, and calls `auth.admin.createUser` with `app_metadata = { created_by, must_change_password }` (only the service role can set app metadata). It then grants the role with `approve_account()` **using the admin's own token**, so the usual checks and history apply; if that fails it deletes the new user. A trigger reads `created_by` (only if it names an active admin) to attribute "Account created". |
+| B13 | Passwords (2026-10-21) | Passwords live only in Supabase Auth. `profiles.must_change_password` makes the app show "Choose your password" before anything else; `complete_password_change()` clears it after `auth.updateUser` succeeds and records it in the history. The flag is a prompt, not a lock. The Account page re-checks the current password before changing it. |
 | B11 | Audited staff access (2026-10-21) | `approve_account`, `change_staff_role`, `deactivate_account`, and `reactivate_account` are the only way to change access through the API. The direct `update` on `profiles` from the first migration was removed. A trigger on `profiles` writes every role, access, name, or title change to `staff_activity` with `actor_id = auth.uid()`: the admin who did it, or null for a trusted SQL-editor step. |
 
 ## 2. Roles and what the database lets them do
@@ -75,6 +77,8 @@ profiles ──< attendance_sessions     (one open session per person: partial u
 | `approve_account(id, role)` | admin | `approveAccount` (manager or editor only) |
 | `change_staff_role(id, role)` | admin | `changeStaffRole` (refused while they hold open packages or own clients/products) |
 | `deactivate_account(id)` / `reactivate_account(id)` | admin | `deactivateAccount` / `reactivateAccount` |
+| `complete_password_change()` | the signed-in person | (Supabase only; the demo has no passwords) |
+| Edge Function `create-staff-account` | admin | `createStaffAccount` (creates the Auth user, then `approve_account`) |
 
 The staff functions refuse changes to yourself and to admin accounts. The audit entry is written by the `audit_profile_changes` trigger, so SQL-editor changes are recorded too.
 
@@ -92,7 +96,7 @@ pages/components ──▶ useAppState() / api   (src/data/hooks.ts, src/data/st
   (select + rpc + Realtime)   (localStorage + workflow.ts)
 ```
 
-- `src/session/AuthProvider.tsx`: restores the session, shows Login, loads the profile, and blocks unapproved or deactivated accounts.
+- `src/session/AuthProvider.tsx`: restores the session, shows Login, loads the profile, blocks unapproved or deactivated accounts, asks for a new password when an admin set a temporary one, and provides `changePassword` for the Account page.
 - `src/session/DataGate.tsx`: loads data after sign-in and starts Realtime, with loading and error/retry screens.
 - `src/data/supabaseBackend.ts`: fetches the tables (RLS filters them), maps `snake_case` rows to the existing types, calls the workflow functions, and refetches after each command or Realtime event.
 - Pages didn't change, apart from awaiting `api` calls and disabling buttons while they run.
@@ -103,14 +107,15 @@ Load limits for now: attendance from the last 45 days, the latest 200 notificati
 
 - `supabase/sql-tests/security_and_workflow.test.sql`: about 100 checks of RLS, role protection, admin oversight, the audited staff functions, and the workflow. They pass on PostgreSQL 16 with a Supabase stub.
 - End to end (2026-10-21): the real app against PostgreSQL 16 with every migration, served by a real PostgREST 16.5, in a headless browser. Only Supabase Auth's token endpoint and Realtime were simulated. Covered: the admin approves a manager and an editor in the app (stored with the admin as actor), the manager assigns, the editor submits, the manager requests feedback, the editor resubmits, the manager approves, a second editor can't see or act on the package or raise their role (UI and direct API calls), the admin inspects both people's work read-only and is refused any workflow action, and data survives reloads and signing out and in. This harness lives outside the repo (Playwright and PostgREST aren't project dependencies).
-- Not tested yet: the hosted Supabase Auth, Realtime, and the Dashboard's user creation together with these triggers.
+- Add user end to end (2026-10-21): the real Edge Function code under Deno 2.5, real PostgreSQL + PostgREST, and a minimal stand-in for Supabase Auth that writes to the real `auth.users` (so the triggers run). Covered: adding an editor and a manager, the history attributed to the admin, duplicate emails, refusing admin creation, unauthenticated and non-admin callers, the forced first password change, the old password no longer working, and changing the password on the Account page.
+- Not tested yet: the hosted Supabase Auth, Realtime, and the hosted Edge Functions runtime (its injected keys).
 
 ## 7. Not done yet
 
 - Applying `20261021120000_admin_oversight.sql` to `cne-dev` (waiting for your go-ahead).
 - A test against the hosted project (Auth, PostgREST, Realtime together).
-- Invite-by-email Edge Function, and password reset by email (users ask the admin for now).
-- Editing names and titles in the app (use `private.approve_staff` in the SQL editor), and creating sign-in accounts from the app (needs the invite Edge Function).
+- Password reset by email ("forgot password"). For now the admin resets passwords in the Dashboard. Invite emails aren't planned; Add user uses a temporary password.
+- Editing names and titles in the app (use `private.approve_staff` in the SQL editor).
 - Client/product management screens (use `supabase/scripts/sample-clients.sql`).
 - On Hold / Cancelled / Archived / Reopen, attendance corrections with audit history (same as the prototype).
 - A scheduled job for the 16-hour auto-close. It runs whenever someone uses the app, and `pg_cron` is still a proposal.

@@ -10,7 +10,7 @@
 - Every oversight screen starts with the **View only** note (`ViewOnlyBanner`): info tone, eye icon, one or two sentences. On a person's page it names the admin ("You're signed in as yourself…") and the person being viewed.
 - No workflow buttons for admins anywhere (Start, Submit, Approve, Apply Feedback, Edit, New package). The package Actions panel shows "View only" with links to the editor's and manager's pages instead.
 - There's no "view as" or account switching. Links go to the person's page, never to their session.
-- Real actions exist only in **Staff & Roles**, behind a dialog that ends with "Recorded in the account history as done by you (<name>)". Deactivation is a confirm step inside the same dialog (danger button, warning about open packages). Never stack two dialogs.
+- Real actions exist only in **Staff & Roles**, behind a dialog that ends with "Recorded in the account history as done by you (<name>)". **Add user** is the page's primary button. Deactivation is a confirm step inside the same dialog (danger button, warning about open packages). Never stack two dialogs.
 
 ## Layouts
 
@@ -30,6 +30,13 @@ Team overview · date                                     (no primary action)
   - Manager: Packages (responsible or created) · Review queue · Decisions · Attendance
   - Filters sit above each tab's table in a 1/2/4-column grid; each value is in the URL. Switching tabs clears the filters.
 - **Staff & Roles:** access tabs (All, Waiting, Active, Deactivated) with counts; the account list (waiting first) and the account history side by side at ≥1280px, stacked below that.
+
+## Add user and passwords
+
+- **Add user dialog:** full name, work email (hint "They sign in with this"), job title (optional), the shared `RolePicker`, and a temporary password with a show/hide icon button and a "Generate a password" ghost button (14 characters, no look-alike characters, shown in a monospace font). Footer button names the role ("Add editor"). A shield note says no email is sent and the change is recorded under the admin.
+- **Success step** in the same dialog: warning callout ("copy the password now, it isn't shown again"), email and password in a bordered list with copy icon buttons, then "Add another" or "Done".
+- **Temporary password** badge (info tone, key icon) on accounts that haven't chosen their own password yet.
+- **Choose your password** (first sign-in) uses the sign-in card layout; **Your account** is a normal page: Profile card (2/5) and Change password (3/5) on desktop, stacked on mobile. Password forms: visible labels, an 8–72 hint, one "Show passwords" toggle, inline errors.
 
 ## Badges
 

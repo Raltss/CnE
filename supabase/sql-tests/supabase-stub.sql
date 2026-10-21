@@ -18,6 +18,8 @@ create table auth.users (
   id uuid primary key default gen_random_uuid(),
   email text,
   raw_user_meta_data jsonb not null default '{}',
+  -- Only the service role can set this in Supabase (e.g. admin.createUser).
+  raw_app_meta_data jsonb not null default '{}',
   created_at timestamptz not null default now()
 );
 

@@ -5,54 +5,13 @@ import { api } from '../../data/store'
 import type { AppState, AssignableRole, Person, StaffAccount } from '../../data/types'
 import { roleChangeBlocker } from '../../data/workflow'
 import { ROLE_META } from '../../lib/status'
-import { buttonClasses, cx } from '../../lib/styles'
+import { buttonClasses } from '../../lib/styles'
 import { Callout } from '../ui/Callout'
 import { Dialog } from '../ui/Dialog'
 import { useToast } from '../ui/toast-context'
+import { RolePicker } from './RolePicker'
 import { StaffActivityList } from './StaffActivityList'
 import { AccessBadge, RoleBadge } from './StatusBadge'
-
-const ROLE_HELP: Record<AssignableRole, string> = {
-  manager: 'Creates and assigns packages, reviews submissions, and sees all work and attendance.',
-  editor: 'Works on the packages assigned to them, submits links, and clocks in and out.',
-}
-
-function RolePicker({ value, onChange, current }: { value: AssignableRole; onChange: (r: AssignableRole) => void; current?: AssignableRole }) {
-  return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="mb-1 text-sm font-medium">Role</legend>
-      {(['manager', 'editor'] as const).map((role) => {
-        const Icon = ROLE_META[role].icon
-        return (
-          <label
-            key={role}
-            className={cx(
-              'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors duration-150',
-              value === role ? 'border-primary bg-primary/5' : 'border-border-strong hover:bg-surface-2',
-            )}
-          >
-            <input
-              type="radio"
-              name="staff-role"
-              value={role}
-              checked={value === role}
-              onChange={() => onChange(role)}
-              className="mt-1 size-4 accent-primary"
-            />
-            <span className="min-w-0">
-              <span className="flex items-center gap-1.5 text-sm font-semibold">
-                <Icon aria-hidden className="size-4" />
-                {ROLE_META[role].label}
-                {current === role && <span className="text-xs font-normal text-muted-fg">(current)</span>}
-              </span>
-              <span className="mt-0.5 block text-xs text-muted-fg">{ROLE_HELP[role]}</span>
-            </span>
-          </label>
-        )
-      })}
-    </fieldset>
-  )
-}
 
 interface StaffAccessDialogProps {
   state: AppState

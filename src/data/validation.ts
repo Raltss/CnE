@@ -1,4 +1,4 @@
-import type { AppState, FieldErrors, PackageInput, SubmissionInput } from './types'
+import type { AppState, FieldErrors, PackageInput, StaffAccountInput, SubmissionInput } from './types'
 
 export function isHttpUrl(value: string): boolean {
   try {
@@ -56,5 +56,43 @@ export function validateSubmissionInput(input: SubmissionInput): FieldErrors<key
   if (!review && !delivery) errors.form = 'Add a review link, a delivery link, or both.'
   if (review && !isHttpUrl(review)) errors.reviewLink = URL_HINT
   if (delivery && !isHttpUrl(delivery)) errors.deliveryLink = URL_HINT
+  return errors
+}
+
+// ── Accounts and passwords ──────────────────────────────────────────────────
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Supabase Auth's minimum here is 8 (supabase/config.toml); bcrypt reads at most 72 characters. */
+export const PASSWORD_MIN = 8
+export const PASSWORD_MAX = 72
+
+function passwordError(password: string): string | undefined {
+  if (password.length < PASSWORD_MIN) return `Use at least ${PASSWORD_MIN} characters.`
+  if (password.length > PASSWORD_MAX) return `Use at most ${PASSWORD_MAX} characters.`
+  return undefined
+}
+
+/** Same rules as supabase/functions/create-staff-account, plus a duplicate-email hint. */
+export function validateStaffAccountInput(state: AppState, input: StaffAccountInput): FieldErrors<keyof StaffAccountInput> {
+  const errors: FieldErrors<keyof StaffAccountInput> = {}
+  const name = input.fullName.trim()
+  const email = input.email.trim().toLowerCase()
+  if (!name) errors.fullName = 'Enter their full name.'
+  else if (name.length > 80) errors.fullName = 'Keep the name under 80 characters.'
+  if (!EMAIL.test(email)) errors.email = 'Enter a valid email address.'
+  else if (state.accounts.some((a) => a.email.toLowerCase() === email)) errors.email = 'An account with this email already exists.'
+  if (input.title.trim().length > 80) errors.title = 'Keep the title under 80 characters.'
+  if (input.role !== 'manager' && input.role !== 'editor') errors.role = 'Choose manager or editor.'
+  const password = passwordError(input.password)
+  if (password) errors.password = password
+  return errors
+}
+
+export function validateNewPassword(password: string, confirm: string): FieldErrors<'password' | 'confirm'> {
+  const errors: FieldErrors<'password' | 'confirm'> = {}
+  const problem = passwordError(password)
+  if (problem) errors.password = problem
+  if (!problem && confirm !== password) errors.confirm = 'The passwords don’t match.'
   return errors
 }

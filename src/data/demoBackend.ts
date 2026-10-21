@@ -97,6 +97,7 @@ export function createDemoBackend(): DemoBackend {
       changeStaffRole: (actorId, profileId, role) => run((d, at) => wf.changeStaffRole(d, actorId, profileId, role, at)),
       deactivateAccount: (actorId, profileId) => run((d, at) => wf.deactivateAccount(d, actorId, profileId, at)),
       reactivateAccount: (actorId, profileId) => run((d, at) => wf.reactivateAccount(d, actorId, profileId, at)),
+      createStaffAccount: (actorId, input) => run((d, at) => wf.createStaffAccount(d, actorId, input, at)),
     },
     resetDemoData() {
       commit(createSeedState())

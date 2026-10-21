@@ -12,7 +12,7 @@ import {
   submitForReview,
 } from './workflow'
 
-export const DEMO_STATE_VERSION = 3
+export const DEMO_STATE_VERSION = 4
 
 const people: Person[] = [
   { id: 'adm_lea', name: 'Lea Navarro', role: 'admin', title: 'Operations Admin', isActive: true },
@@ -33,8 +33,17 @@ const pendingAccount = { id: 'new_nico', name: 'Nico Ramos', title: '' }
 function seedAccounts(now: Date): { accounts: StaffAccount[]; staffActivity: StaffActivity[] } {
   const daysAgo = (d: number) => new Date(now.getTime() - d * DAY_MS).toISOString()
   const accounts: StaffAccount[] = [
-    ...people.map((p) => ({ id: p.id, name: p.name, email: `${p.id}@demo.cne`, title: p.title, role: p.role, isActive: true, createdAt: daysAgo(30) })),
-    { ...pendingAccount, email: 'nico@demo.cne', role: null, isActive: false, createdAt: daysAgo(0.1) },
+    ...people.map((p) => ({
+      id: p.id,
+      name: p.name,
+      email: `${p.id}@demo.cne`,
+      title: p.title,
+      role: p.role,
+      isActive: true,
+      createdAt: daysAgo(30),
+      mustChangePassword: false,
+    })),
+    { ...pendingAccount, email: 'nico@demo.cne', role: null, isActive: false, createdAt: daysAgo(0.1), mustChangePassword: false },
   ]
   const staffActivity: StaffActivity[] = accounts.flatMap((a) => {
     const created: StaffActivity = {

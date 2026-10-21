@@ -19,7 +19,7 @@ import type {
   Submission,
   WorkPackage,
 } from './types'
-import { validatePackageInput, validateSubmissionInput } from './validation'
+import { validatePackageInput, validateStaffAccountInput, validateSubmissionInput } from './validation'
 
 // ── Row shapes (as stored in supabase/migrations) ───────────────────────────
 
@@ -31,6 +31,7 @@ interface ProfileRow {
   role: Person['role'] | null
   is_active: boolean
   created_at: string
+  must_change_password: boolean
 }
 interface ClientRow {
   id: string
@@ -145,6 +146,7 @@ function toState(rows: {
     role: p.role,
     isActive: p.is_active,
     createdAt: iso(p.created_at),
+    mustChangePassword: p.must_change_password,
   }))
   return {
     accounts,
@@ -232,6 +234,22 @@ function friendlyError(error: { message: string; code?: string }): string {
 
 const fail = (error: string, fieldErrors?: Record<string, string>): ActionResult<never> => ({ ok: false, error, fieldErrors })
 
+/** The JSON an Edge Function sent with a non-2xx status, if any. */
+async function functionErrorBody(error: unknown): Promise<{ error?: string; message?: string; fieldErrors?: Record<string, string> } | null> {
+  const context = (error as { context?: unknown }).context
+  if (!(context instanceof Response)) return null
+  try {
+    return await context.clone().json()
+  } catch {
+    return null
+  }
+}
+
+function functionUnavailable(error: unknown): boolean {
+  const context = (error as { context?: unknown }).context
+  return !(context instanceof Response) || context.status === 404
+}
+
 export function createSupabaseBackend(supabase: SupabaseClient): Backend {
   const listeners = new Set<() => void>()
   let state: AppState | null = null
@@ -252,7 +270,7 @@ export function createSupabaseBackend(supabase: SupabaseClient): Backend {
     if (!state) setStatus({ phase: 'loading' })
     const since = new Date(Date.now() - ATTENDANCE_DAYS * 24 * 60 * 60 * 1000).toISOString()
     const [profiles, clients, products, packages, submissions, activity, attendance, notifications, staffActivity] = await Promise.all([
-      supabase.from('profiles').select('id, email, full_name, title, role, is_active, created_at').order('full_name'),
+      supabase.from('profiles').select('id, email, full_name, title, role, is_active, created_at, must_change_password').order('full_name'),
       supabase.from('clients').select('id, name, manager_id').order('name'),
       supabase.from('products').select('id, client_id, name, manager_id').order('name'),
       supabase.from('packages').select('*'),
@@ -361,6 +379,26 @@ export function createSupabaseBackend(supabase: SupabaseClient): Backend {
     changeStaffRole: (_actorId, profileId, role) => rpc('change_staff_role', { p_profile_id: profileId, p_role: role }),
     deactivateAccount: (_actorId, profileId) => rpc('deactivate_account', { p_profile_id: profileId }),
     reactivateAccount: (_actorId, profileId) => rpc('reactivate_account', { p_profile_id: profileId }),
+    async createStaffAccount(_actorId, input) {
+      if (state) {
+        const errors = validateStaffAccountInput(state, input)
+        if (Object.keys(errors).length) return fail('Fix the highlighted fields.', errors as Record<string, string>)
+      }
+      const { data, error } = await supabase.functions.invoke<{ id: string }>('create-staff-account', {
+        body: { ...input, fullName: input.fullName.trim(), email: input.email.trim(), title: input.title.trim() },
+      })
+      if (error) {
+        const body = await functionErrorBody(error)
+        if (body?.error) return fail(body.error, body.fieldErrors)
+        return fail(
+          functionUnavailable(error)
+            ? 'Couldn’t reach the Add user function. Check that it’s deployed (docs/supabase-setup.md) and try again.'
+            : (body?.message ?? 'Couldn’t add the account. Try again.'),
+        )
+      }
+      await load()
+      return data?.id ? { ok: true, value: { id: data.id } } : fail('The account may have been added, but the reply was unexpected. Refresh the page.')
+    },
   }
 
   return {

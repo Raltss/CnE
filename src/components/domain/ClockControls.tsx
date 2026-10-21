@@ -56,7 +56,7 @@ export function ClockPill() {
             <span className="sr-only md:hidden">Clock out</span>
           </>
         ) : (
-          <span>Clock in</span>
+          <span className="whitespace-nowrap">Clock in</span>
         )}
       </button>
       <ClockOutConfirm clock={clock} />

@@ -1,4 +1,4 @@
-import { Bell, Clapperboard, Ellipsis, LogOut } from 'lucide-react'
+import { Bell, Clapperboard, Ellipsis, LogOut, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { ClockPill } from '../components/domain/ClockControls'
@@ -122,11 +122,23 @@ export function AppShell() {
               {me.title && `${me.title} · `}
               <span className="capitalize">{me.role}</span>
             </p>
+            <NavLink
+              to="/account"
+              className={({ isActive }) =>
+                cx(
+                  'mt-3 inline-flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm font-medium',
+                  isActive ? 'bg-primary/10 text-primary' : 'text-muted-fg hover:bg-surface-2 hover:text-fg',
+                )
+              }
+            >
+              <UserRound aria-hidden className="size-4" />
+              Your account
+            </NavLink>
             {signOut && (
               <button
                 type="button"
                 onClick={() => void signOut()}
-                className="mt-3 inline-flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm font-medium text-muted-fg hover:bg-surface-2 hover:text-fg"
+                className="mt-1 inline-flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm font-medium text-muted-fg hover:bg-surface-2 hover:text-fg"
               >
                 <LogOut aria-hidden className="size-4" />
                 Sign out
@@ -144,10 +156,16 @@ export function AppShell() {
                 </span>
                 <span className="sr-only">CnE home</span>
               </Link>
-              <p className="min-w-0 truncate text-sm">
+              {/* The name doubles as the way to the account page (password) on small screens. */}
+              <Link
+                to="/account"
+                title="Your account"
+                className="min-w-0 truncate rounded-md text-sm underline-offset-2 hover:underline"
+              >
                 <span className="font-semibold">{me.name}</span>
                 <span className="text-muted-fg capitalize"> · {me.role}</span>
-              </p>
+                <span className="sr-only"> (your account)</span>
+              </Link>
             </div>
             <div className="flex items-center gap-2">
               {doesWork && <ClockPill />}

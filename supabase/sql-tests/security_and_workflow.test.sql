@@ -108,6 +108,7 @@ set local role anon;
 select test.expect_error('select count(*) from public.packages', 'permission denied', 'anon cannot read packages');
 select test.expect_error('select count(*) from public.profiles', 'permission denied', 'anon cannot read profiles');
 select test.expect_error('select public.clock_in()', 'permission denied', 'anon cannot call workflow functions');
+select test.expect_error('select public.complete_password_change()', 'permission denied', 'anon cannot call complete_password_change');
 reset role;
 
 -- ── Signed in but not approved yet ──────────────────────────────────────────
@@ -190,6 +191,70 @@ select test.expect_error($$select public.create_package('X', 'c0000000-0000-0000
   'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
   '00000000-0000-0000-0000-000000000001', now() + interval '1 day')$$, 'Only managers', 'admin cannot create packages');
 select test.expect_error('select public.clock_in()', 'Only managers and editors', 'admin does not clock in');
+
+-- ── Accounts an admin adds in the app (create-staff-account Edge Function) ───
+-- The function creates the Auth user with the service role; only it can set app_metadata.
+
+reset role;
+select test.as_trusted();
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data) values
+  ('00000000-0000-0000-0000-000000000021', 'nina@cne.test', '{"full_name": "Nina Cruz", "title": "Junior Editor"}',
+   '{"created_by": "00000000-0000-0000-0000-00000000000a", "must_change_password": true}'),
+  ('00000000-0000-0000-0000-000000000022', 'forged@cne.test', '{"created_by": "00000000-0000-0000-0000-00000000000a"}',
+   '{"created_by": "00000000-0000-0000-0000-000000000011"}'),
+  ('00000000-0000-0000-0000-000000000023', 'garbage@cne.test', '{}', '{"created_by": "not-a-uuid", "must_change_password": "yes"}'),
+  ('00000000-0000-0000-0000-000000000024', 'tara@cne.test', '{}',
+   '{"created_by": "00000000-0000-0000-0000-00000000000a", "must_change_password": true}');
+select test.expect(
+  (select full_name = 'Nina Cruz' and title = 'Junior Editor' and must_change_password and role is null and not is_active
+   from public.profiles where id = '00000000-0000-0000-0000-000000000021'),
+  'an admin-added account gets its name, title, and the temporary-password flag, but no role yet'
+);
+select test.expect(
+  (select actor_id = '00000000-0000-0000-0000-00000000000a' from public.staff_activity
+   where profile_id = '00000000-0000-0000-0000-000000000021' and type = 'account_created'),
+  'the new account is recorded as created by the admin named in app metadata'
+);
+select test.expect(
+  (select actor_id is null from public.staff_activity where profile_id = '00000000-0000-0000-0000-000000000022' and type = 'account_created'),
+  'created_by naming a non-admin, or placed in user metadata, is ignored'
+);
+select test.expect(
+  (select actor_id is null from public.staff_activity where profile_id = '00000000-0000-0000-0000-000000000023' and type = 'account_created')
+  and (select not must_change_password from public.profiles where id = '00000000-0000-0000-0000-000000000023'),
+  'malformed app metadata doesn''t break account creation'
+);
+set local role authenticated;
+
+select test.as_user('00000000-0000-0000-0000-00000000000a');
+select public.approve_account('00000000-0000-0000-0000-000000000021', 'editor');
+select test.as_user('00000000-0000-0000-0000-000000000021');
+select test.expect(
+  (select must_change_password and role = 'editor' from public.profiles where id = '00000000-0000-0000-0000-000000000021'),
+  'the new editor can see that they must choose a password'
+);
+select test.expect_error($$update public.profiles set must_change_password = false where id = '00000000-0000-0000-0000-000000000021'$$,
+  'permission denied', 'the flag can''t be cleared with a direct update');
+select public.complete_password_change();
+select test.expect(
+  (select not must_change_password from public.profiles where id = '00000000-0000-0000-0000-000000000021')
+  and (select must_change_password from public.profiles where id = '00000000-0000-0000-0000-000000000024'),
+  'complete_password_change clears only the caller''s own flag'
+);
+select public.complete_password_change();
+select test.expect((select count(*) from public.staff_activity) = 0, 'the person still can''t read the account history');
+
+select test.as_user('00000000-0000-0000-0000-00000000000a');
+select test.expect(
+  (select actor_id = '00000000-0000-0000-0000-000000000021' from public.staff_activity
+   where profile_id = '00000000-0000-0000-0000-000000000021' and message = 'Replaced the temporary password with their own'),
+  'choosing their own password is recorded with the person as actor'
+);
+select test.expect(
+  (select count(*) from public.staff_activity where profile_id = '00000000-0000-0000-0000-000000000021'
+   and message = 'Changed their password') = 1,
+  'a later change is recorded as a normal password change'
+);
 
 -- The trigger is a second lock behind RLS: even a direct table write is refused.
 reset role;
