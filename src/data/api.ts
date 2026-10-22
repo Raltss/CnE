@@ -19,13 +19,32 @@ function client() {
 
 const refresh = (...queryKeys: QueryKey[]) => Promise.all(queryKeys.map((queryKey) => queryClient.invalidateQueries({ queryKey })))
 
-/** Run a database function; on success refresh the given lists (and wait for those on screen). */
-async function call<T>(fn: string, args: Record<string, unknown> | undefined, affects: QueryKey[]): Promise<ActionResult<T>> {
-  markOwnChange()
-  const { data, error } = await client().rpc(fn, args)
-  if (error) return fail(friendlyError(error))
-  await refresh(...affects)
-  return { ok: true, value: data as T }
+/** Changes on their way to the server, by function and arguments. */
+const inFlight = new Map<string, Promise<ActionResult<unknown>>>()
+
+/**
+ * Run a database function; on success refresh the given lists (and wait for those on screen).
+ * The same change requested again while the first is still running (a double click, a
+ * second button for the same action) waits for the first instead of sending it twice.
+ */
+function call<T>(fn: string, args: Record<string, unknown> | undefined, affects: QueryKey[]): Promise<ActionResult<T>> {
+  const id = `${fn}:${JSON.stringify(args ?? {})}`
+  const running = inFlight.get(id)
+  if (running) return running as Promise<ActionResult<T>>
+  const run = (async (): Promise<ActionResult<T>> => {
+    markOwnChange()
+    const { data, error } = await client().rpc(fn, args)
+    if (error) {
+      // A refusal such as "already approved" or "already clocked in" usually means this
+      // screen is out of date (another person or tab acted first), so refresh it too.
+      void refresh(...affects)
+      return fail(friendlyError(error))
+    }
+    await refresh(...affects)
+    return { ok: true, value: data as T }
+  })().finally(() => inFlight.delete(id))
+  inFlight.set(id, run)
+  return run
 }
 
 /** The JSON an Edge Function sent with a non-2xx status, if any. */

@@ -63,7 +63,7 @@ export function Notifications() {
           </div>
         }
       >
-        {list.isPending || list.error ? (
+        {list.data === undefined ? (
           <PageStatus error={list.error?.message} retry={() => void list.refetch()} />
         ) : (
           <>

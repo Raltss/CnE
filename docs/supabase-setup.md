@@ -49,26 +49,34 @@ The migrations are in `supabase/migrations/`:
 | `20261021130000_staff_accounts.sql` | accounts added in the app: the "choose your own password" flag (`must_change_password`), the job title from the new account's details, history attribution to the admin who added them, and `complete_password_change()` |
 | `20261021140000_products_without_clients.sql` | products without clients: `create_product(name)` for managers, package functions without a client, and the old client data kept but unused |
 | `20261021150000_query_performance.sql` | faster reads: turns off JIT compilation for signed-in API requests, and adds an index for listing finished packages newest first. No data changes |
+| `20261022100000_account_flags_and_clock_in.sql` | v1 fixes: people added with **Add user** are asked to choose their own password, and "Account created" names the admin (Supabase Auth writes that metadata in a second step the earlier trigger missed); a simultaneous second clock-in gets "You’re already clocked in" instead of a raw database error |
+
+**Status on `cne-dev` (checked 2026-10-22 with `npx supabase migration list --linked`):** the first eight are applied. Only `20261022100000_account_flags_and_clock_in.sql` is left.
 
 From the project folder:
 
 ```bash
-npx supabase login                 # once, opens the browser
-npx supabase db push --dry-run     # shows what would run
-npx supabase db push               # applies it to cne-dev
+npx supabase login                       # once, opens the browser
+npx supabase projects list               # the linked project has a ● next to it: cne-dev (hmvrqkuqyqjtryqpskvg)
+npx supabase migration list --linked     # what's applied (read-only)
+npx supabase db push --dry-run           # shows what would run: only 20261022100000_account_flags_and_clock_in.sql
+npx supabase db push                     # applies it to cne-dev (asks for confirmation)
 ```
 
-- The dry run lists only the files that aren't applied yet. If the first four are already applied, that's `20261021120000_admin_oversight.sql`, `20261021130000_staff_accounts.sql`, `20261021140000_products_without_clients.sql`, and `20261021150000_query_performance.sql`. If it lists anything else, or reports tables that already exist, stop and review before pushing.
-- These migrations don't change or delete existing accounts, packages, rounds, or attendance. They add policies, the `staff_activity` table, the `must_change_password` column, triggers, functions, and one index, set `jit = off` for the `authenticated` role, and start each existing account's history with an "Account history started" entry.
-- **Apply them before using the updated app.** It loads `staff_activity` and `must_change_password`, and shows "Couldn't load your account" or "Couldn't load this" until they exist.
+- If the dry run lists anything other than `20261022100000_account_flags_and_clock_in.sql`, or reports tables that already exist, stop and review before pushing.
+- What `20261022100000_…` does: adds one trigger on `auth.users` (for future Add user accounts), replaces the `clock_in()` function (same behavior plus a clear message when two clock-ins race), and runs a one-time backfill. **It deletes nothing.** The backfill (1) sets `must_change_password` for accounts added with Add user whose person never changed their own password, so they're asked to choose one at their next sign-in, and (2) fills in the admin on their "Account created" history entry. Packages, rounds, attendance, and notifications are untouched.
+- None of the migrations change or delete existing accounts, packages, rounds, or attendance. Together they add policies, the `staff_activity` table, the `must_change_password` column, triggers, functions, and one index, set `jit = off` for the `authenticated` role, and start each existing account's history with an "Account history started" entry.
 
 ## 4. Deploy the Add user function
 
 **Add user** in the app runs a small server-side function, `supabase/functions/create-staff-account`, because creating sign-in accounts needs the service-role key, which must never be in the browser.
 
 ```bash
-npx supabase functions deploy create-staff-account
+npx supabase functions list                          # read-only: create-staff-account should be ACTIVE
+npx supabase functions deploy create-staff-account   # only needed if the function's code changed
 ```
+
+On `cne-dev` it's deployed (v2, 2026-10-21, after the function's last code change), so v1 needs no redeploy.
 
 - Supabase gives the function its URL and keys automatically (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`); there's nothing to configure.
 - `supabase/config.toml` sets `verify_jwt = false` for this function on purpose: the function checks the caller's token itself with Supabase Auth, then requires an active admin.
@@ -150,8 +158,14 @@ Optional: `supabase/scripts/sample-products.sql` adds four starter products from
 ## 9. Try it
 
 ```bash
-npm run dev     # http://localhost:5173
+npm install
+npm run dev                  # development server, http://localhost:5173
+
+npm run build                # type-check + production build into dist/
+npm run preview              # serves dist/ at http://localhost:4173 (measure Lighthouse here)
 ```
+
+`npm run build` bakes in the values from `.env.local`, so the build talks to whichever project `.env.local` names (`cne-dev` today).
 
 Use a normal window for one person and a private window (or another browser) for the next.
 
@@ -164,7 +178,25 @@ Use a normal window for one person and a private window (or another browser) for
 7. **Another editor** (optional third account): they don't see the package; its URL shows "Package not found"; **Overview** says "This page is for admins".
 8. **Persistence:** reload any page, or sign out (sidebar, or the icon in the top bar on small screens) and sign back in. Everything is still there.
 
-## 10. Check the security rules yourself (optional)
+## 10. Verify the backend end to end
+
+`supabase/e2e/verify-backend.mjs` runs the v1 checklist through the public API, the way the app does: you (admin), a test manager, and two test editors each have their own signed-in session. It adds the three test accounts through **Add user**, runs assign → start → submit → Apply Feedback → resubmit → approve, a reassignment, and attendance, checks who gets which notification (as rows and live through Realtime), what editors and admins are refused, and what deactivated and never-approved accounts can read. At the end it deactivates the test accounts (their records stay). About 95 checks, 1–2 minutes.
+
+```bash
+CNE_SUPABASE_URL=https://hmvrqkuqyqjtryqpskvg.supabase.co \
+CNE_SUPABASE_KEY=sb_publishable_... \
+CNE_ADMIN_EMAIL=you@yourdomain.com \
+CNE_ADMIN_PASSWORD='your admin password' \
+node supabase/e2e/verify-backend.mjs
+```
+
+- `CNE_SUPABASE_KEY` is the publishable key from `.env.local` (never the secret key).
+- Apply `20261022100000_…` first (step 3); without it, the three "asked to choose their own password" checks fail.
+- It leaves test data in the project: a product `E2E Product <run>`, two packages, their rounds, activity, notifications, a few attendance sessions, and three deactivated accounts `cne-e2e-<run>-…@example.com`. Use it on `cne-dev`, never on production. Details and options: [`supabase/e2e/README.md`](../supabase/e2e/README.md).
+- To also check a never-approved account, create one in the Dashboard (Authentication → Users → Add user, Auto Confirm) and pass `CNE_PENDING_EMAIL` / `CNE_PENDING_PASSWORD`.
+- Your admin password goes only to Supabase Auth; the script never prints it. Type it into the command yourself (or `export` it in your shell) rather than saving it in a file in the repo.
+
+## 11. Check the security rules yourself (optional)
 
 `supabase/sql-tests/security_and_workflow.test.sql` signs in as each role and checks about 125 rules: RLS isolation, admin read-only oversight, the audited staff functions, accounts added in the app, password-change records, no self-promotion, no direct writes, the workflow, attendance, and notifications. It runs in a transaction that's rolled back, so it leaves no data behind. See [`supabase/sql-tests/README.md`](../supabase/sql-tests/README.md).
 
@@ -180,6 +212,7 @@ Use a normal window for one person and a private window (or another browser) for
 | "Couldn't load this" mentioning `staff_activity` | `20261021120000_admin_oversight.sql` hasn't been applied (step 3) |
 | "Couldn't load this" / `relation "public.packages" does not exist` | The migrations haven't been applied (step 3) |
 | Add user: "Couldn't reach the Add user function" | Deploy it (step 4) |
+| Someone added with **Add user** isn't asked to choose their own password | `20261022100000_account_flags_and_clock_in.sql` isn't applied yet (step 3) |
 | Add user: "An account with this email already exists." | Someone already signs in with that email; find them in the list (they may be waiting for approval or deactivated) |
 | "Can't change the role yet" in Staff & Roles | The person still holds open packages. A manager reassigns them first |
 | Someone forgot their password | Password reset by email isn't built yet. In the Dashboard: Authentication → Users → the user → reset or set a new password |

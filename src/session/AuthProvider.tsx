@@ -9,7 +9,7 @@
 // supabase-js keeps the session in localStorage and refreshes the token, so a
 // page reload restores the session without signing in again.
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Person } from '../data/types'
 import { AuthLayout, StatusScreen } from '../pages/auth/AuthLayout'
 import { Login } from '../pages/auth/Login'
@@ -35,10 +35,20 @@ export function AuthProvider({
 }) {
   const [auth, setAuth] = useState<AuthState>({ phase: 'restoring' })
   const signedIn = auth.phase === 'signed_in'
+  const userId = signedIn ? auth.userId : null
+  const lastUserId = useRef<string | null>(null)
 
   useEffect(() => {
     if (signedIn) onSignedIn?.()
   }, [signedIn, onSignedIn])
+
+  useEffect(() => {
+    if (!userId) return
+    // Someone else signed in on this browser: start them on their own home page, not on
+    // the page (and filters) the previous person left open. A reload keeps the URL.
+    if (lastUserId.current && lastUserId.current !== userId) window.history.replaceState(null, '', '/')
+    lastUserId.current = userId
+  }, [userId])
 
   useEffect(() => {
     // Keep the same object while the user is unchanged, so token refreshes don't reload the profile.
@@ -118,6 +128,29 @@ function StaffGate({
       cancelled = true
     }
   }, [supabase, userId, attempt])
+
+  // An admin may deactivate someone or change their role while they're signed in. RLS
+  // blocks their reads at once; re-checking when they return to the tab (and every few
+  // minutes) also moves them to the right screen, with a fresh cache, without a reload.
+  const role = profile.phase === 'ready' ? profile.me.role : null
+  useEffect(() => {
+    if (!role) return
+    const recheck = async () => {
+      if (document.visibilityState !== 'visible') return
+      const { data, error } = await supabase.from('profiles').select('role, is_active').eq('id', userId).maybeSingle()
+      if (error) return // e.g. offline; nothing changed that we know of
+      if (data?.role !== role || !data.is_active) {
+        setProfile({ phase: 'loading' })
+        setAttempt((n) => n + 1)
+      }
+    }
+    document.addEventListener('visibilitychange', recheck)
+    const timer = window.setInterval(recheck, 5 * 60_000)
+    return () => {
+      document.removeEventListener('visibilitychange', recheck)
+      window.clearInterval(timer)
+    }
+  }, [supabase, userId, role])
 
   /** Sets the new password in Supabase Auth, then clears the "choose your password" prompt. */
   const savePassword = useCallback(

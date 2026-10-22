@@ -1,79 +1,37 @@
-<<<<<<< HEAD
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
-```
-
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
-```
-=======
 # CnE
->>>>>>> 2f8d17a77fdf909ecc87b10ca2d5f199b3df37af
+
+Internal workflow app for a video editing agency: packages (Product → Package) assigned to editors, a review loop with external review and delivery links (Frame.io, Google Drive, …), submission history, in-app notifications, and clock-in/out attendance. Admins manage staff access and oversee all work read-only.
+
+React 19 + TypeScript + Vite, with Supabase for the database, email/password sign-in, and Realtime. All permissions are enforced in the database (Row Level Security and checked workflow functions).
+
+## Run it
+
+You need Node 22+ and a Supabase project with the migrations applied ([`docs/supabase-setup.md`](docs/supabase-setup.md)).
+
+```bash
+cp .env.example .env.local    # then fill in VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY
+npm install
+npm run dev                   # development server, http://localhost:5173
+```
+
+Production build and local preview:
+
+```bash
+npm run build                 # type-check + build into dist/
+npm run preview               # serve dist/ at http://localhost:4173
+```
+
+## Checks
+
+```bash
+npm run lint
+supabase/sql-tests/run-on-plain-postgres.sh "postgresql://postgres@127.0.0.1:5432/postgres"   # scratch database only
+node supabase/e2e/verify-backend.mjs   # needs CNE_* variables; see supabase/e2e/README.md
+```
+
+## Documentation
+
+- [`docs/product-requirements.md`](docs/product-requirements.md): requirements, decisions, and implementation status
+- [`docs/supabase-setup.md`](docs/supabase-setup.md): connecting a project, migrations, the first admin, adding staff, verification
+- [`docs/how-the-app-works.md`](docs/how-the-app-works.md): how the code fits together, with a walkthrough you can try
+- [`docs/backend-plan.md`](docs/backend-plan.md): data model, security, and test results

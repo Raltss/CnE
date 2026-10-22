@@ -620,12 +620,17 @@ export function useAccountHistory(profileId: string | null, limit = 3) {
 interface QueryLike {
   isPending: boolean
   error: Error | null
+  data: unknown
   refetch: () => unknown
 }
 
-/** Combined loading/error state of the queries a page needs before it can render. */
+/**
+ * Combined loading/error state of the queries a page needs before it can render.
+ * A failed background refresh keeps showing the data already loaded; only a list
+ * that never loaded shows the error.
+ */
 export function pageStatus(...queries: QueryLike[]) {
-  const failed = queries.filter((q) => q.error)
+  const failed = queries.filter((q) => q.error && q.data === undefined)
   return {
     pending: queries.some((q) => q.isPending),
     error: failed[0]?.error?.message ?? null,

@@ -26,6 +26,13 @@ export function markOwnChange() {
 
 const MERGE_MS = 200
 
+/**
+ * Each subscription gets its own channel name. supabase-js hands back an existing channel
+ * with the same name, and removing one finishes asynchronously, so reusing the name on a
+ * quick remount (signing out and back in) could return the channel that is still closing.
+ */
+let subscriptions = 0
+
 export function useLiveUpdates(personId: string) {
   const queryClient = useQueryClient()
 
@@ -52,7 +59,7 @@ export function useLiveUpdates(personId: string) {
     const fromThisTab = (who: string | undefined) => who === personId && Date.now() < ownChangeUntil
 
     const channel = db
-      .channel(`cne-live-${personId}`)
+      .channel(`cne-live-${personId}-${(subscriptions += 1)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity' }, ({ new: row }) => {
         if (fromThisTab(row.actor_id)) return
         refresh(keys.activeWork, keys.package(row.package_id), ['finished'], ['rounds'], ['recent'])
