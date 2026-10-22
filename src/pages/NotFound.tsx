@@ -17,7 +17,7 @@ export function NotFound() {
         </Link>
       }
     >
-      The link may be outdated, or this page isn’t part of the prototype.
+      The link may be outdated or mistyped.
     </EmptyState>
   )
 }

@@ -90,7 +90,7 @@ export function Staff() {
           className="xl:col-span-3"
           flush
         >
-          {accountsQuery.isPending || accountsQuery.error ? (
+          {accountsQuery.data === undefined ? (
             <PageStatus error={accountsQuery.error?.message} retry={() => void accountsQuery.refetch()} />
           ) : shown.length ? (
             <ul className="divide-y divide-border">
@@ -147,7 +147,7 @@ export function Staff() {
         </Section>
 
         <Section title="Account history" description="Every role and access change, newest first" className="xl:col-span-2" flush>
-          {historyQuery.isPending || historyQuery.error ? (
+          {historyQuery.data === undefined ? (
             <PageStatus error={historyQuery.error?.message} retry={() => void historyQuery.refetch()} />
           ) : (
             <StaffActivityList accounts={allAccounts} entries={history} showAccount label="Account history" />

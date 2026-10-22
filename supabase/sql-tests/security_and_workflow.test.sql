@@ -222,6 +222,34 @@ select test.expect(
   and (select not must_change_password from public.profiles where id = '00000000-0000-0000-0000-000000000023'),
   'malformed app metadata doesn''t break account creation'
 );
+
+-- Real Supabase Auth (admin createUser) inserts the row first and writes app_metadata in a second UPDATE.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data) values
+  ('00000000-0000-0000-0000-000000000025', 'omar@cne.test', '{"full_name": "Omar Diaz"}', '{"provider": "email"}'),
+  ('00000000-0000-0000-0000-000000000026', 'forged2@cne.test', '{}', '{"provider": "email"}');
+update auth.users
+set raw_app_meta_data = raw_app_meta_data || '{"created_by": "00000000-0000-0000-0000-00000000000a", "must_change_password": true}'
+where id = '00000000-0000-0000-0000-000000000025';
+update auth.users
+set raw_app_meta_data = raw_app_meta_data || '{"created_by": "00000000-0000-0000-0000-000000000011"}'
+where id = '00000000-0000-0000-0000-000000000026';
+select test.expect(
+  (select must_change_password from public.profiles where id = '00000000-0000-0000-0000-000000000025')
+  and (select actor_id = '00000000-0000-0000-0000-00000000000a' from public.staff_activity
+       where profile_id = '00000000-0000-0000-0000-000000000025' and type = 'account_created'),
+  'app metadata written after the account row still sets the password prompt and the creating admin'
+);
+select test.expect(
+  (select actor_id is null from public.staff_activity where profile_id = '00000000-0000-0000-0000-000000000026' and type = 'account_created')
+  and (select not must_change_password from public.profiles where id = '00000000-0000-0000-0000-000000000026'),
+  'a later created_by naming a non-admin is still ignored'
+);
+update public.profiles set must_change_password = false where id = '00000000-0000-0000-0000-000000000025';
+update auth.users set raw_app_meta_data = raw_app_meta_data || '{"provider": "email"}' where id = '00000000-0000-0000-0000-000000000025';
+select test.expect(
+  (select not must_change_password from public.profiles where id = '00000000-0000-0000-0000-000000000025'),
+  'rewriting the same app metadata later (e.g. on sign-in) doesn''t bring the password prompt back'
+);
 set local role authenticated;
 
 select test.as_user('00000000-0000-0000-0000-00000000000a');

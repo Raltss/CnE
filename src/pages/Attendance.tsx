@@ -55,9 +55,9 @@ export function Attendance() {
           ) : (
             <ClockCard />
           )}
-          <Callout tone="info" title="Corrections: later milestone">
-            Correction requests (editors) and approvals with an audit history (managers) are planned for a later milestone. This prototype records clock-ins
-            and clock-outs only.
+          <Callout tone="info" title="Need a correction?">
+            CnE records clock-ins and clock-outs only. Correction requests aren’t in the app yet: if a session is wrong or was auto-closed, tell your
+            manager.
           </Callout>
         </div>
         <div className="flex min-w-0 flex-col gap-5 xl:col-span-2">
@@ -75,7 +75,7 @@ function MyAttendance({ personId }: { personId: string }) {
   const mine = (sessions.data ?? []).filter((s) => withinDays(s.clockIn, 30, now))
   return (
     <Section title="My attendance" description="Last 30 days" flush>
-      {sessions.isPending || sessions.error ? (
+      {sessions.data === undefined ? (
         <PageStatus error={sessions.error?.message} retry={() => void sessions.refetch()} />
       ) : (
         <AttendanceTable sessions={mine} now={now} caption="My attendance, last 30 days" />
@@ -97,7 +97,7 @@ function TeamAttendance() {
   return (
     <>
       <Section title={open.data ? `Clocked in now (${open.data.length})` : 'Clocked in now'} flush>
-        {open.isPending || open.error ? (
+        {open.data === undefined ? (
           <PageStatus error={open.error?.message} retry={() => void open.refetch()} />
         ) : open.data!.length ? (
           <ul className="divide-y divide-border">
@@ -144,7 +144,7 @@ function TeamAttendance() {
           </div>
         }
       >
-        {team.isPending || team.error ? (
+        {team.data === undefined ? (
           <PageStatus error={team.error?.message} retry={() => void team.refetch()} />
         ) : (
           <AttendanceTable lookup={lookup} sessions={shown} now={now} showPerson caption={`Team attendance, last ${TEAM_DAYS} days`} />

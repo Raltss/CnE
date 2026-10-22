@@ -6,7 +6,7 @@
 - nobody can change their own role; only admins change other people's roles or access, only through the staff functions, never to or from admin
 - every access change is recorded in `staff_activity` with the admin who made it (or as trusted setup from the SQL editor)
 - admins read all work but can't create, edit, review, submit, clock in, or write tables
-- accounts added through the Add user function are attributed to the admin named in `app_metadata` (only if that's an active admin), get the "choose your password" flag, and `complete_password_change()` clears only the caller's flag
+- accounts added through the Add user function are attributed to the admin named in `app_metadata` (only if that's an active admin), get the "choose your password" flag, and `complete_password_change()` clears only the caller's flag. This includes the order real Supabase Auth uses (insert the user, then write `app_metadata` in an UPDATE); the stub's single insert alone hid that bug until 2026-10-22
 - editors only see their own packages, history, attendance, and notifications
 - tables can't be written directly; only the workflow functions change data
 - managers add products by name (unique, ignoring case), editors and admins can't; packages need no client

@@ -2,7 +2,7 @@
 
 This guide describes the code as it is today, not as the PRD plans it. Where the two differ, it says so.
 
-> **Short version:** CnE is a React app backed by **Supabase**. You sign in with email and password. The database decides what each person can see (Row Level Security) and runs every change through checked database functions. Each page asks the database only for what it shows, and keeps a copy for a minute so going back to a page is instant. Four of the eight migrations are applied to `cne-dev`; the other four are written and tested locally but **not applied yet** (see §5). The offline `localStorage` demo was removed on 2026-10-21.
+> **Short version:** CnE is a React app backed by **Supabase**. You sign in with email and password. The database decides what each person can see (Row Level Security) and runs every change through checked database functions. Each page asks the database only for what it shows, and keeps a copy for a minute so going back to a page is instant. This is **v1** (feature-frozen 2026-10-22). On `cne-dev`, eight of the nine migrations are applied and the Add user function is deployed; the ninth (`20261022100000_account_flags_and_clock_in.sql`) is written and tested but **not applied yet** (see §5). The offline `localStorage` demo was removed on 2026-10-21.
 
 ---
 
@@ -210,7 +210,7 @@ const result = await api.submitForReview(pkg.id, { reviewLink, deliveryLink })
 setBusy(false)
 ```
 
-`await` means "wait for the server to answer". The form has `noValidate`, so the browser's own URL check is off; our checks run instead.
+`await` means "wait for the server to answer". The form has `noValidate`, so the browser's own URL check is off; our checks run instead. Disabling the button is the first guard against a double click; `call()` in `api.ts` is the second: if the same change (same function, same arguments) is already on its way, a repeat waits for that one instead of sending another.
 
 **Step 4: Quick validation in the browser.**
 `api.submitForReview` in [`api.ts`](../src/data/api.ts) first calls `validateSubmissionInput` from [`validation.ts`](../src/data/validation.ts):
@@ -245,7 +245,7 @@ The nav badges read current work through a `select` that computes just the count
 
 **Step 8: Feedback for Bea.**
 Back in `SubmissionForm.onSubmit`:
-- **Failure** (validation or a database error such as "Start work before submitting."): `setErrors(...)` shows the message, and focus moves to the field.
+- **Failure** (validation or a database error such as "Start work before submitting."): `setErrors(...)` shows the message, and focus moves to the field. A database refusal also refreshes the same lists as a success would, because it usually means the screen was out of date (for example, a manager in another window already acted).
 - **Success:** the fields are cleared and `toast.show("Round 1 submitted. Andrea Santos has been notified.")` pops up.
 
 **Step 9: The manager sees it live.**
@@ -272,7 +272,18 @@ Events that arrive within 200 ms are merged, so this is one refresh per list. Th
 | Admin tasks | In the app (Staff & Roles): `approve_account`, `change_staff_role`, `deactivate_account`, `reactivate_account`, each recorded in `staff_activity` under the admin. The first admin, and admin access in general, only in the SQL editor (`first-admin.sql`, `private.approve_staff`) |
 | Admin oversight | RLS read policies give admins every package, round, activity entry, and attendance session; the workflow functions still refuse their writes |
 
-**Current state:** sign-in works against `cne-dev`. Four migrations **aren't applied yet** (`…120000_admin_oversight`, `…130000_staff_accounts`, `…140000_products_without_clients`, `…150000_query_performance`) and the Add user function isn't deployed. Until the first two are applied, the app shows "Couldn't load your account" or "Couldn't load this" ([`supabase-setup.md` steps 3–4](supabase-setup.md#3-apply-the-migrations)). The SQL is tested on PostgreSQL 16, and the whole workflow was run end to end in a browser against real PostgreSQL + PostgREST (with simulated Auth and Realtime).
+**Current state (2026-10-22):** on `cne-dev` the first eight migrations are applied and the Add user function is deployed. `20261022100000_account_flags_and_clock_in.sql` isn't applied yet: until it is, people added with Add user aren't asked to choose their own password (Supabase Auth writes the "temporary password" flag in a second step that the earlier trigger missed), and a simultaneous second clock-in shows a raw database message ([`supabase-setup.md` step 3](supabase-setup.md#3-apply-the-migrations)). v1 was verified against the **real** Supabase Auth and PostgREST binaries (the versions `cne-dev` runs) on local PostgreSQL, in the API (`supabase/e2e/verify-backend.mjs`) and in a browser; hosted Realtime and the hosted Edge runtime haven't been exercised yet ([`supabase-setup.md` §10](supabase-setup.md#10-verify-the-backend-end-to-end)).
+
+### Signing in, switching people, losing access
+
+| Situation | What happens |
+|---|---|
+| Reload or reopen the tab | supabase-js restores the session from `localStorage`; you stay on the same page |
+| Sign out | The session ends, the live-update channel closes, and the cache is emptied |
+| A **different** person signs in on the same browser | They start on their own home page (not the page the previous person left open), with a new router and an empty cache |
+| An admin deactivates you, or changes your role, while you're signed in | Every read is refused by RLS at once. When you come back to the tab (or within 5 minutes) the app re-checks your access: deactivated people see "Account deactivated", a new role reloads the app for that role |
+| A list fails to refresh in the background (e.g. offline) | What's on screen stays; only a list that never loaded shows "Couldn't load this" with Try again |
+| A change is refused ("already approved", "already clocked in") | The error is shown and the affected lists refresh, so the screen catches up |
 
 ### Uses mock data / `localStorage`
 
@@ -287,9 +298,9 @@ For speed tests there's `supabase/sql-tests/volume-fixture.sql`: a year of made-
 | Password reset by email ("forgot password") | ❌ Ask the admin, who resets it in the Dashboard. (Adding people works in the app with a temporary password; there are no invite emails.) |
 | Google sign-in | ❌ Deferred; a future addition |
 | Editing names/titles in the app | ⚠️ Set at Add user; change them later via `private.approve_staff` in the SQL editor |
-| On Hold, Resume, Cancel, Archive, Unarchive | ❌ The statuses exist in the types and the database enum, but nothing moves a package to them |
+| On Hold, Resume, Cancel, Archive, Unarchive | ⏸ Deferred after v1. The statuses exist in the types and the database enum, but nothing moves a package to them |
 | Reopen a Completed package | ❌ Completed packages can't be edited |
-| Attendance correction requests, approvals, direct corrections, audit history | ❌ The Attendance page shows a "later milestone" note |
+| Attendance correction requests, approvals, direct corrections, audit history | ⏸ Deferred after v1. The Attendance page tells people to ask their manager |
 | Renaming/removing products, Editors management screen | ❌ Products can only be added (Packages → Add product). Clients were removed on purpose (2026-10-21) |
 | Scheduled 16-hour auto-close | ⚠️ Runs on every clock action and every minute while someone has the app open; `pg_cron` is still a proposal |
 | Global search box and user menu in the top bar | ❌ Search exists only on the Packages page filters |
@@ -316,7 +327,9 @@ You need the migrations applied, the Add user function deployed, and three accou
 
 ```bash
 npm install
-npm run dev     # http://localhost:5173
+npm run dev                       # http://localhost:5173
+# or, to try the production build:
+npm run build && npm run preview  # http://localhost:4173
 ```
 
 Use a normal window for one person and a private window (or another browser) for the next. Signed-in sessions are per browser, so two windows of the same browser are the same person. Changes appear live in the other window.

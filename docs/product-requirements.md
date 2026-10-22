@@ -2,7 +2,7 @@
 
 CnE is an internal workflow web application for a video editing agency. It tracks work from assignment through review to completion, records staff attendance, and notifies people when work needs their attention.
 
-> Status: **requirements agreed, interface proposal approved.** The app runs on Supabase; the newest migration (admin oversight) isn't applied yet. See [Implementation status](#implementation-status) and [`backend-plan.md`](backend-plan.md).
+> Status: **v1, feature-frozen (2026-10-22).** The app runs on Supabase; one new migration (`20261022100000_account_flags_and_clock_in.sql`) still needs `db push` on `cne-dev`. See [Implementation status](#implementation-status) and [`backend-plan.md`](backend-plan.md).
 > Items marked **(Default)** are my assumptions where the answers left a detail open. They count as requirements unless overridden.
 > Items marked **(Proposal)** have not been approved and are not requirements.
 
@@ -328,24 +328,27 @@ Accessibility: AA contrast, visible focus rings, 44px touch targets, labeled ico
 
 ## Implementation status
 
-Milestone 1, the **frontend prototype**, is done (see [`prototype-notes.md`](prototype-notes.md)). Milestone 2 connects it to **Supabase**: sign-in and the first four migrations are in use on `cne-dev`; the other four (admin oversight, staff accounts, products without clients, query performance; 2026-10-21) are ready and tested locally but **not applied yet** (see [`backend-plan.md`](backend-plan.md) and [`supabase-setup.md`](supabase-setup.md)). The localStorage demo was removed on 2026-10-21.
+**v1 (2026-10-22): feature-frozen.** Milestone 1 (frontend prototype) and Milestone 2 (Supabase) are done; v1 is the scope below, repaired and verified end to end. Nothing new is added in v1; the next phase is AWS deployment. All nine migrations except `20261022100000_account_flags_and_clock_in.sql` are applied on `cne-dev`, and the Add user function is deployed there. See [`supabase-setup.md`](supabase-setup.md) for the one remaining `db push`.
+
+Verified on 2026-10-22 against real Supabase Auth (GoTrue v2.197) + PostgREST v14.18 on local PostgreSQL 16, with the Edge Function under Deno and a Realtime stand-in: 127 SQL checks, 94 API checks with separate signed-in sessions (`supabase/e2e/verify-backend.mjs`), and 58 browser checks of the production build. **Not yet run against the hosted project's Auth, Realtime, and Edge runtime**; `verify-backend.mjs` does that once you run it with an admin login (see [`supabase-setup.md`](supabase-setup.md) §10).
 
 | Area | Status |
 |---|---|
 | Project scaffold (Vite + React + TS, ESLint) | ✅ Done |
 | Requirements and decisions | ✅ Agreed (this document) |
 | Design system | ✅ Saved to `design-system/cne/MASTER.md` |
-| UI dependencies | ✅ Tailwind CSS v4, lucide-react, react-router, TanStack Query (reads, caching, paging) installed. shadcn/ui not needed yet |
-| Supabase client, schema, RLS | 🟡 8 migrations, RLS on every table, workflow, staff and product functions, about 125 SQL security checks passing (plain Postgres 16 + Supabase stub), plus an end-to-end browser run against real Postgres + PostgREST. Migrations 120000–150000 aren't applied to `cne-dev` yet |
-| Performance and loading | 🟡 Each page loads only what it shows (explicit columns and filters, exact totals, paged histories), changes and live updates refresh only affected lists, pages downloaded on first use, demo mode removed. Measured on a 3,000-package fixture; see `backend-plan.md` §6. Not yet measured against the hosted project |
-| Auth, accounts, roles | 🟡 Email/password sign-in, session restore, sign-out, approval gate, roles enforced in the database. Admin **Add user** (Edge Function, temporary password), forced first password change, Account page with Change password. Function not deployed yet. Password reset by email and Google OAuth not started |
-| Products / packages | 🟡 Add product (name only), create, edit, reassign, filters, on Supabase (`create_product`, `create_package`, `update_package`). No clients |
-| Package workflow (main statuses) | 🟡 Assigned → In Progress → Submitted → Apply Feedback / Completed, enforced by database functions |
-| On Hold / Cancelled / Archived / Reopen | Not started |
-| Submissions and history | 🟡 One row per round (never overwritten), review and delivery links, optional feedback note, activity log |
-| Attendance (clock in/out, overnight, 16h auto-close) | 🟡 On Supabase; one open session enforced by a unique index; auto-close runs on clock actions and every minute while the app is open (no scheduled job yet) |
-| Attendance corrections + audit | Not started |
-| Notifications | 🟡 In-app, unread counts, mark read; Supabase Realtime wired up (not yet tested against a live project) |
-| Manager / editor dashboards | 🧪 Prototype. Manager dashboard simplified (4 tiles, review + workload, drill-down dialogs; see `design-system/cne/pages/dashboard.md`), plus Deadlines and Time Clock pages |
-| Admin (staff and roles) | 🟡 Staff & Roles: add users, approve, change manager ↔ editor, deactivate/reactivate, with an account history naming the admin. First admin via `first-admin.sql`. Name edits and password resets not in the app yet |
-| Admin oversight | 🟡 Overview, Team, per-person detail pages (assignments, submissions, review queue, decisions, attendance, with URL filters), read-only Packages, package detail, and Attendance. Enforced by RLS; needs `20261021120000_admin_oversight.sql` applied |
+| UI dependencies | ✅ Tailwind CSS v4, lucide-react, react-router, TanStack Query. shadcn/ui not needed in v1 |
+| Supabase client, schema, RLS | ✅ 9 migrations, RLS on every table, every write through a checked function |
+| Auth, accounts, roles | ✅ Email/password sign-in, session restore, sign-out, approval gate, roles enforced in the database, access re-checked when the tab regains focus. Admin **Add user** with a temporary password and a forced first password change (fixed 2026-10-22: needs `20261022100000_…` applied), Account page with Change password. Password reset by email and Google OAuth deferred |
+| Products / packages | ✅ Add product (name only), create, edit, reassign (both editors notified), one final deadline in Manila time, brief + reference links, description, deliverables. No clients (removed 2026-10-21) |
+| Package workflow (main statuses) | ✅ Assigned → In Progress → Submitted → Apply Feedback ↔ Submitted → Completed, enforced by database functions; repeated clicks send one change |
+| Submissions and history | ✅ One row per round (never overwritten), review and delivery links, optional feedback note, activity log, editors' History of finished work |
+| Notifications | ✅ In-app, unread counts, mark read, live through Realtime (verified with a stand-in; hosted Realtime not yet) |
+| Attendance (clock in/out, overnight, 16h auto-close) | ✅ One open session per person (also under simultaneous clicks), survives reloads, overnight sessions under their Manila clock-in date, auto-close on clock actions and every minute while the app is open |
+| Manager / editor dashboards | ✅ Manager Dashboard, Review Queue, Deadlines, Packages, Time Clock, Attendance; editor My Work, Needs Changes, History, Attendance |
+| Admin (staff and roles) | ✅ Staff & Roles: add users, approve, change manager ↔ editor, deactivate/reactivate, account history naming the admin. First admin via `first-admin.sql` |
+| Admin oversight | ✅ Overview, Team, per-person pages, read-only Packages, package detail, and Attendance, all labeled View only |
+| Performance and loading | ✅ Each page loads only what it shows; a change or live update refetches only lists on screen (manager Dashboard: 7 reads after sign-in, 2 after someone else's submission, 0 when returning to a cached page). Volume figures in `backend-plan.md` §6 |
+| On Hold / Cancelled / Archived / Reopen | ⏸ Deferred after v1 (feature freeze). Statuses exist in the database enum only |
+| Attendance corrections + audit | ⏸ Deferred after v1. The Attendance page tells people to ask their manager |
+| Email notifications, in-app comments, payroll, video storage, new reports, Google sign-in | ⏸ Out of scope for v1 |

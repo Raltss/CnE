@@ -364,7 +364,7 @@ function RoundsTab({ person, lookup, params, set, decisions }: TabProps & { look
         description={decisions ? `Rounds ${person.name} approved or sent back for changes` : `Every round ${person.name} submitted, newest first`}
         flush
       >
-        {rounds.isPending || rounds.error ? (
+        {rounds.data === undefined ? (
           <PageStatus error={rounds.error?.message} retry={() => void rounds.refetch()} />
         ) : (
           <>
@@ -421,7 +421,7 @@ function AttendanceTab({ person, params, set, now }: TabProps & { now: Date }) {
         }
         flush
       >
-        {sessions.isPending || sessions.error ? (
+        {sessions.data === undefined ? (
           <PageStatus error={sessions.error?.message} retry={() => void sessions.refetch()} />
         ) : (
           <AttendanceTable sessions={rows} now={now} caption={`${person.name}’s attendance, last ${days} days`} />

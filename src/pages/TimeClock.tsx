@@ -45,7 +45,7 @@ export function TimeClock() {
               </Link>
             }
           >
-            {sessions.isPending || sessions.error ? (
+            {sessions.data === undefined ? (
               <PageStatus error={sessions.error?.message} retry={() => void sessions.refetch()} />
             ) : (
               <AttendanceTable sessions={week} now={now} caption="My sessions, last 7 days" />

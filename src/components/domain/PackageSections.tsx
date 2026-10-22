@@ -46,7 +46,7 @@ export function PackageSections({ lookup, now, active, finished, columns, captio
       )}
       {finished && (
         <Section title={done.isPending ? 'Finished' : `Finished (${total})`} description="Most recently finished first" flush>
-          {done.isPending || done.error ? (
+          {done.data === undefined ? (
             <PageStatus error={done.error?.message} retry={() => void done.refetch()} />
           ) : finishedRows.length ? (
             <>
