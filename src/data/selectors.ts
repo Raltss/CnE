@@ -9,6 +9,12 @@ export const ACTIVE_STATUSES: PackageStatus[] = ['assigned', 'in_progress', 'sub
 /** Statuses a package can't leave without a manager reopening it: finished work, paged in history lists. */
 export const FINISHED_STATUSES: PackageStatus[] = ['completed', 'cancelled', 'archived']
 
+/**
+ * Everything in current work (loaded completely): active packages, plus those waiting on
+ * the client or on hold. Only active ones count as the editor's workload or go overdue.
+ */
+export const CURRENT_STATUSES: PackageStatus[] = [...ACTIVE_STATUSES, 'client_review', 'on_hold']
+
 export const isActive = (pkg: Pick<PackageSummary, 'status'>) => ACTIVE_STATUSES.includes(pkg.status)
 
 /** Overdue is derived, not a status: past deadline while still active. */
@@ -41,11 +47,27 @@ export function makeLookup(people: Person[], products: Product[]): Lookup {
 export const managers = (people: Person[]) => people.filter((p) => p.role === 'manager' && p.isActive)
 export const editors = (people: Person[]) => people.filter((p) => p.role === 'editor' && p.isActive)
 
-/** PRD default: a round can only be approved when it has a delivery link. */
-export function approvalBlocker(latest: RoundSummary | null): string | null {
+/**
+ * PRD default: a package is completed only with a delivery link on its latest round,
+ * whether a manager approves it directly or records the client's approval.
+ */
+export function completionBlocker(latest: RoundSummary | null): string | null {
   if (!latest) return 'Nothing has been submitted yet.'
-  if (!latest.deliveryLink) return 'This round has no delivery link. Mark Apply Feedback so the editor can resubmit with one.'
+  if (!latest.deliveryLink) return `Round ${latest.round} has no delivery link yet. The editor can add it from the package page.`
   return null
+}
+
+/** "2 of 3 included", "4 (1 over the 3 included)", or just the count when no limit is set. */
+export function revisionSummary(used: number, included: number | null) {
+  if (included === null) return `${used}`
+  if (used > included) return `${used} (${used - included} over the ${included} included)`
+  return `${used} of ${included} included`
+}
+
+/** Client revisions so far (rounds the client sent back) against the product's allowance. */
+export function clientRevisions(rounds: Array<{ outcome: RoundSummary['outcome'] }>, includedRevisions: number | null) {
+  const used = rounds.filter((r) => r.outcome === 'client_feedback').length
+  return { used, included: includedRevisions, extra: includedRevisions === null ? 0 : Math.max(0, used - includedRevisions) }
 }
 
 // ── Filtering current work (URL-driven) ─────────────────────────────────────
@@ -74,15 +96,16 @@ export interface FinishedFilters {
 }
 
 /** Whether a status filter can only match current work, or only finished work. */
-export const showsActive = (f: PackageFilters) => !f.status || f.status === 'active' || ACTIVE_STATUSES.includes(f.status as PackageStatus)
+export const showsActive = (f: PackageFilters) => !f.status || f.status === 'active' || CURRENT_STATUSES.includes(f.status as PackageStatus)
 export const showsFinished = (f: PackageFilters) => !f.due && (!f.status || FINISHED_STATUSES.includes(f.status as PackageStatus))
 
-/** Applies the filters to the (complete) list of current packages, soonest deadline first. */
+/** Applies the filters to the (complete) list of current packages, soonest deadline first. On Hold counts as current, not active. */
 export function filterActive(packages: PackageSummary[], f: PackageFilters, now: Date) {
   const q = f.q.trim().toLowerCase()
   return packages
     .filter((p) => {
-      if (!isActive(p)) return false
+      if (!CURRENT_STATUSES.includes(p.status)) return false
+      if (f.status === 'active' && !isActive(p)) return false
       if (f.product && p.productId !== f.product) return false
       if (f.editor && p.editorId !== f.editor) return false
       if (f.manager && p.responsibleManagerId !== f.manager) return false
@@ -118,15 +141,18 @@ export interface EditorWorkload {
   needsChanges: number
   /** Submitted and waiting for a manager. */
   awaitingReview: number
+  /** On hold: shown separately, not part of the workload (PRD §8). */
+  onHold: number
 }
 
-/** PRD: workload is the count of active packages per editor. */
+/** PRD: workload is the count of active packages per editor; packages on hold are counted separately. */
 export function editorWorkload(people: Person[], packages: PackageSummary[], now: Date): EditorWorkload[] {
   return editors(people)
     .map((editor) => {
       const mine = packages.filter((p) => p.editorId === editor.id && isActive(p))
       return {
         editor,
+        onHold: packages.filter((p) => p.editorId === editor.id && p.status === 'on_hold').length,
         active: mine.length,
         dueSoon: mine.filter((p) => isDueWithin(p, now, 48 * HOUR_MS)).length,
         overdue: mine.filter((p) => isOverdue(p, now)).length,

@@ -2,7 +2,7 @@ import { Check, Clapperboard, ExternalLink, RotateCcw, Truck } from 'lucide-reac
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { api } from '../../data/api'
-import { approvalBlocker, type Lookup } from '../../data/selectors'
+import { completionBlocker, type Lookup } from '../../data/selectors'
 import type { PackageSummary } from '../../data/types'
 import { buttonClasses, fieldAria, inputClasses } from '../../lib/styles'
 import { formatDateTime } from '../../lib/time'
@@ -10,6 +10,8 @@ import { Callout } from '../ui/Callout'
 import { Dialog } from '../ui/Dialog'
 import { Field } from '../ui/Field'
 import { useToast } from '../ui/toast-context'
+import { APPROVE_COPY, type ApproveMode } from './approve'
+import { ApproveOptions } from './ApproveOptions'
 import { DeadlineBadge } from './DeadlineBadge'
 import { LinkField } from './LinkField'
 
@@ -24,19 +26,21 @@ interface ReviewDialogProps {
 }
 
 /**
- * Quick review without leaving the dashboard: check the latest round's links,
- * then approve or mark Apply Feedback. One dialog that steps between views,
- * so there are never two modals stacked.
+ * Quick review without leaving the dashboard: check the latest round's links, then
+ * approve (send to the client, or complete) or mark Apply Feedback. One dialog that
+ * steps between views, so there are never two modals stacked.
  */
 export function ReviewDialog({ lookup, pkg, now, onClose }: ReviewDialogProps) {
   const toast = useToast()
   const [mode, setMode] = useState<Mode>('review')
+  const [approveMode, setApproveMode] = useState<ApproveMode>('client')
   const [note, setNote] = useState('')
   const [noteError, setNoteError] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
 
   const close = () => {
     setMode('review')
+    setApproveMode('client')
     setNote('')
     setNoteError(undefined)
     onClose()
@@ -45,14 +49,16 @@ export function ReviewDialog({ lookup, pkg, now, onClose }: ReviewDialogProps) {
   if (!pkg) return <Dialog open={false} onClose={close} title="Review" />
 
   const latest = pkg.latest
-  const blocker = approvalBlocker(latest)
+  // Without a delivery link the round can still go to the client, but not be completed.
+  const noDelivery = completionBlocker(latest)
   const editorName = lookup.personName(pkg.editorId)
+  const copy = APPROVE_COPY[approveMode]
 
   const approve = async () => {
     setBusy(true)
-    const r = await api.approve(pkg.id)
+    const r = approveMode === 'client' ? await api.sendToClient(pkg.id) : await api.approve(pkg.id)
     setBusy(false)
-    toast.show(r.ok ? `Approved. ${editorName} has been notified.` : r.error, r.ok ? 'success' : 'error')
+    toast.show(r.ok ? copy.done(editorName) : r.error, r.ok ? 'success' : 'error')
     if (r.ok) close()
   }
   const sendFeedback = async () => {
@@ -72,20 +78,22 @@ export function ReviewDialog({ lookup, pkg, now, onClose }: ReviewDialogProps) {
       <Dialog
         open
         onClose={close}
-        title="Approve this package?"
-        description={`Round ${latest?.round} will be approved and ${pkg.title} marked Completed. ${editorName} will be notified.`}
+        title={`Approve Round ${latest?.round ?? 1}`}
+        description={`${pkg.title} · ${editorName} will be notified.`}
         footer={
           <>
             <button key="back" type="button" className={buttonClasses('secondary')} onClick={() => setMode('review')}>
               Back
             </button>
-            <button key="confirm" type="button" autoFocus disabled={busy} className={buttonClasses('primary')} onClick={approve}>
+            <button key="confirm" type="button" disabled={busy} className={buttonClasses('primary')} onClick={approve}>
               <Check aria-hidden className="size-4" />
-              Approve and complete
+              {busy ? copy.busy : copy.confirm}
             </button>
           </>
         }
-      />
+      >
+        <ApproveOptions latest={latest} value={approveMode} onChange={setApproveMode} />
+      </Dialog>
     )
 
   if (mode === 'feedback')
@@ -137,27 +145,13 @@ export function ReviewDialog({ lookup, pkg, now, onClose }: ReviewDialogProps) {
             Open full package
           </Link>
           {/* Keys force fresh buttons per view, so autoFocus restores focus after "Back". */}
-          <button
-            key="apply"
-            type="button"
-            autoFocus={Boolean(blocker)}
-            className={buttonClasses('secondary')}
-            onClick={() => setMode('feedback')}
-          >
+          <button key="apply" type="button" className={buttonClasses('secondary')} onClick={() => setMode('feedback')}>
             <RotateCcw aria-hidden className="size-4" />
             Apply Feedback
           </button>
-          <button
-            key="approve"
-            type="button"
-            autoFocus={!blocker}
-            className={buttonClasses('primary')}
-            disabled={Boolean(blocker)}
-            aria-describedby={blocker ? 'review-blocker' : undefined}
-            onClick={() => setMode('approve')}
-          >
+          <button key="approve" type="button" autoFocus aria-haspopup="dialog" className={buttonClasses('primary')} onClick={() => setMode('approve')}>
             <Check aria-hidden className="size-4" />
-            Approve
+            Approve…
           </button>
         </>
       }
@@ -181,12 +175,10 @@ export function ReviewDialog({ lookup, pkg, now, onClose }: ReviewDialogProps) {
         <LinkField label="Delivery link" icon={Truck} url={latest?.deliveryLink ?? null} />
       </div>
 
-      {blocker ? (
-        <div id="review-blocker">
-          <Callout tone="warning" title="Can’t approve yet">
-            {blocker}
-          </Callout>
-        </div>
+      {noDelivery ? (
+        <Callout tone="info" title="No delivery link yet">
+          You can send this round to the client now. To complete the package, it needs a delivery link, which the editor can add from the package page.
+        </Callout>
       ) : (
         <p className="text-sm text-muted-fg">Check the links above. Detailed comments go in Frame.io.</p>
       )}

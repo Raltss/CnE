@@ -18,6 +18,8 @@ interface PackageTableProps {
   caption: string
   /** Optional per-row action (e.g. Start / Review). */
   action?: (pkg: PackageSummary) => ReactNode
+  /** Router state for the package links, e.g. so the package page's Back returns here. */
+  linkState?: unknown
 }
 
 const HEAD: Record<PackageColumn, string> = {
@@ -32,14 +34,14 @@ const HEAD: Record<PackageColumn, string> = {
 }
 
 /** Dense table on ≥768px; stacked cards on mobile. */
-export function PackageTable({ lookup, packages, now, columns, caption, action }: PackageTableProps) {
+export function PackageTable({ lookup, packages, now, columns, caption, action, linkState }: PackageTableProps) {
   const wide = useIsWide()
   const cell = (pkg: PackageSummary, col: PackageColumn): ReactNode => {
     switch (col) {
       case 'package':
         return (
           <span className="flex flex-col">
-            <Link to={`/packages/${pkg.id}`} className="font-semibold text-fg underline-offset-2 hover:text-primary hover:underline">
+            <Link to={`/packages/${pkg.id}`} state={linkState} className="font-semibold text-fg underline-offset-2 hover:text-primary hover:underline">
               {pkg.title}
             </Link>
             <span className="text-xs text-muted-fg tabular-nums">{pkg.code}</span>

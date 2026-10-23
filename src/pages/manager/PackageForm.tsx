@@ -1,6 +1,7 @@
 import { ArrowLeft, Lock, Plus, SearchX, Trash2 } from 'lucide-react'
+import { StatusBadge } from '../../components/domain/StatusBadge'
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { AddProductDialog } from '../../components/domain/AddProductDialog'
 import { Callout } from '../../components/ui/Callout'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -12,8 +13,10 @@ import { api } from '../../data/api'
 import { pageStatus, useDirectory, usePackage } from '../../data/queries'
 import { editors, managers } from '../../data/selectors'
 import type { PackageInput, Person, Product, WorkPackage } from '../../data/types'
+import { FIXED_ASSIGNMENT_STATUSES } from '../../data/validation'
 import { buttonClasses, cardClasses, cx, fieldAria, inputClasses } from '../../lib/styles'
-import { DAY_MS, fromManilaInputValue, toManilaInputValue } from '../../lib/time'
+import { useBack } from '../../lib/back'
+import { DAY_MS, formatDateTime, fromManilaInputValue, toManilaInputValue } from '../../lib/time'
 import { useSession } from '../../session/context'
 
 interface FormValues {
@@ -62,6 +65,12 @@ const omit = (errors: Record<string, string>, ...keys: string[]) =>
 
 const FIELD_ORDER = ['title', 'productId', 'briefLink', 'referenceLinks', 'deliverables', 'editorId', 'responsibleManagerId', 'deadline']
 
+/** Active people to choose from, plus whoever holds the role now if they've since been deactivated. */
+function choices(active: Person[], people: Person[], currentId: string | undefined) {
+  const current = people.find((p) => p.id === currentId)
+  return current && !active.includes(current) ? [...active, current] : active
+}
+
 export function PackageFormPage() {
   const { id } = useParams()
   const detail = usePackage(id)
@@ -76,10 +85,10 @@ export function PackageFormPage() {
         It may have been removed, or the link is wrong.
       </EmptyState>
     )
-  if (pkg?.status === 'completed')
+  if (pkg?.status === 'archived')
     return (
-      <EmptyState icon={Lock} title="Completed packages can’t be edited" action={<Link to={`/packages/${pkg.id}`} className={buttonClasses('primary')}>View package</Link>}>
-        Reopening completed packages is planned for a later milestone.
+      <EmptyState icon={Lock} title="Archived packages can’t be edited" action={<Link to={`/packages/${pkg.id}`} className={buttonClasses('primary')}>View package</Link>}>
+        Unarchive it from the package page first.
       </EmptyState>
     )
   // Remount the form when switching between packages so its state resets.
@@ -89,7 +98,11 @@ export function PackageFormPage() {
 function PackageForm({ people, products, pkg }: { people: Person[]; products: Product[]; pkg: WorkPackage | null }) {
   const { me } = useSession()
   const navigate = useNavigate()
+  const location = useLocation()
   const toast = useToast()
+  // Back, Cancel, and saving an edit return to whichever page opened the form (the
+  // Packages list with its filters, or the package); a direct link falls back to these.
+  const back = useBack(pkg ? { to: `/packages/${pkg.id}`, label: 'Package' } : { to: '/packages', label: 'Packages' })
   const [values, setValues] = useState<FormValues>(() => initialValues(pkg, me.id))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -100,6 +113,9 @@ function PackageForm({ people, products, pkg }: { people: Person[]; products: Pr
     setValues((v) => ({ ...v, [key]: value }))
     if (errors[key]) setErrors((e) => omit(e, key))
   }
+
+  // Completed and cancelled packages: details only (same rule as update_package).
+  const fixed = pkg && FIXED_ASSIGNMENT_STATUSES.includes(pkg.status) ? pkg : null
 
   const setRef = (index: number, value: string) => {
     setValues((v) => ({ ...v, referenceLinks: v.referenceLinks.map((l, i) => (i === index ? value : l)) }))
@@ -115,10 +131,11 @@ function PackageForm({ people, products, pkg }: { people: Person[]; products: Pr
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault()
     if (saving) return
-    const deadline = fromManilaInputValue(values.deadline)
-    const input: PackageInput = { ...values, deadline: deadline ?? '' }
+    // A finished package keeps its editor and deadline exactly as stored.
+    const deadline = fixed ? fixed.deadline : fromManilaInputValue(values.deadline)
+    const input: PackageInput = { ...values, ...(fixed && { editorId: fixed.editorId }), deadline: deadline ?? '' }
     setSaving(true)
-    const result = pkg ? await api.updatePackage(pkg.id, input, pkg.deadline) : await api.createPackage(input)
+    const result = pkg ? await api.updatePackage(pkg, input) : await api.createPackage(input)
     setSaving(false)
     if (!result.ok) {
       const fieldErrors = { ...(result.fieldErrors ?? {}) } as Record<string, string>
@@ -132,8 +149,15 @@ function PackageForm({ people, products, pkg }: { people: Person[]; products: Pr
       if (first) document.getElementById(`pkg-${first.replace('.', '-')}`)?.focus()
       return
     }
-    toast.show(pkg ? 'Package updated' : 'code' in result.value ? `Package ${result.value.code} created and assigned` : 'Package created and assigned')
-    navigate(`/packages/${result.value.id}`)
+    if (pkg) {
+      toast.show('Package updated')
+      back.go()
+      return
+    }
+    toast.show('code' in result.value ? `Package ${result.value.code} created and assigned` : 'Package created and assigned')
+    // The new package takes the form's place in history, so Back from it returns to
+    // where the form was opened instead of to a form that was already sent.
+    navigate(`/packages/${result.value.id}`, { replace: true, state: location.state })
   }
 
   const err = (key: string) => errors[key]
@@ -141,19 +165,22 @@ function PackageForm({ people, products, pkg }: { people: Person[]; products: Pr
 
   return (
     <>
-      <Link to={pkg ? `/packages/${pkg.id}` : '/packages'} className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+      <Link to={back.to} onClick={back.onClick} className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
         <ArrowLeft aria-hidden className="size-4" />
-        {pkg ? 'Back to package' : 'Back to packages'}
+        Back to {back.label.toLowerCase()}
       </Link>
       <PageHeader
         title={pkg ? `Edit ${pkg.code}` : 'New package'}
         description={pkg ? pkg.title : 'Create a package and assign it to one editor. The editor is notified right away.'}
+        actions={pkg && <StatusBadge status={pkg.status} />}
       />
 
       <form noValidate onSubmit={onSubmit} className="flex max-w-3xl flex-col gap-5">
-        {formError && Object.keys(errors).length > 0 && (
+        {/* Field problems are listed under each field; a refusal about the package as a whole shows only here. */}
+        {formError && (
           <Callout tone="danger" title="Couldn’t save the package">
-            {formError} {Object.keys(errors).length} field{Object.keys(errors).length > 1 ? 's need' : ' needs'} attention.
+            {formError}
+            {Object.keys(errors).length > 0 && ` ${Object.keys(errors).length} field${Object.keys(errors).length > 1 ? 's need' : ' needs'} attention.`}
           </Callout>
         )}
 
@@ -290,28 +317,38 @@ function PackageForm({ people, products, pkg }: { people: Person[]; products: Pr
         <fieldset className={cx(cardClasses, 'flex flex-col gap-4 p-4')}>
           <legend className="sr-only">Assignment and deadline</legend>
           <h2 className="text-base font-semibold">Assignment & deadline</h2>
+          {fixed && (
+            <Callout tone="info" title={`The editor and deadline stay as they are on a ${fixed.status === 'completed' ? 'completed' : 'cancelled'} package`}>
+              {fixed.status === 'completed' ? 'Reopen the package to change them. ' : ''}You can still change the details, links, and responsible manager.
+            </Callout>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              id="pkg-editorId"
-              label="Assigned editor"
-              required
-              error={err('editorId')}
-              hint={editorChanged ? 'Both editors will be notified about the reassignment.' : 'One editor per package.'}
-            >
-              <select
-                {...fieldAria('pkg-editorId', { error: err('editorId'), hasHint: true })}
-                value={values.editorId}
-                onChange={(e) => set('editorId', e.target.value)}
-                className={inputClasses(Boolean(err('editorId')))}
+            {fixed ? (
+              <LockedValue label="Assigned editor" value={people.find((p) => p.id === fixed.editorId)?.name ?? 'Unknown'} />
+            ) : (
+              <Field
+                id="pkg-editorId"
+                label="Assigned editor"
+                required
+                error={err('editorId')}
+                hint={editorChanged ? 'Both editors will be notified about the reassignment.' : 'One editor per package.'}
               >
-                <option value="">Choose an editor</option>
-                {editors(people).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
+                <select
+                  {...fieldAria('pkg-editorId', { error: err('editorId'), hasHint: true })}
+                  value={values.editorId}
+                  onChange={(e) => set('editorId', e.target.value)}
+                  className={inputClasses(Boolean(err('editorId')))}
+                >
+                  <option value="">Choose an editor</option>
+                  {choices(editors(people), people, pkg?.editorId).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                      {!p.isActive && ' (deactivated)'}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field
               id="pkg-responsibleManagerId"
               label="Responsible manager"
@@ -326,27 +363,32 @@ function PackageForm({ people, products, pkg }: { people: Person[]; products: Pr
                 className={inputClasses(Boolean(err('responsibleManagerId')))}
               >
                 <option value="">Choose a manager</option>
-                {managers(people).map((p) => (
+                {choices(managers(people), people, pkg?.responsibleManagerId).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
+                    {!p.isActive && ' (deactivated)'}
                   </option>
                 ))}
               </select>
             </Field>
           </div>
-          <Field id="pkg-deadline" label="Final deadline (Manila time, PHT)" required error={err('deadline')} hint="Date and time in Asia/Manila.">
-            <input
-              {...fieldAria('pkg-deadline', { error: err('deadline'), hasHint: true })}
-              type="datetime-local"
-              value={values.deadline}
-              onChange={(e) => set('deadline', e.target.value)}
-              className={inputClasses(Boolean(err('deadline')))}
-            />
-          </Field>
+          {fixed ? (
+            <LockedValue label="Final deadline (Manila time, PHT)" value={formatDateTime(fixed.deadline)} />
+          ) : (
+            <Field id="pkg-deadline" label="Final deadline (Manila time, PHT)" required error={err('deadline')} hint="Date and time in Asia/Manila.">
+              <input
+                {...fieldAria('pkg-deadline', { error: err('deadline'), hasHint: true })}
+                type="datetime-local"
+                value={values.deadline}
+                onChange={(e) => set('deadline', e.target.value)}
+                className={inputClasses(Boolean(err('deadline')))}
+              />
+            </Field>
+          )}
         </fieldset>
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Link to={pkg ? `/packages/${pkg.id}` : '/packages'} className={buttonClasses('secondary')}>
+          <Link to={back.to} onClick={back.onClick} className={buttonClasses('secondary')}>
             Cancel
           </Link>
           <button type="submit" disabled={saving} className={buttonClasses('primary')}>
@@ -359,5 +401,19 @@ function PackageForm({ people, products, pkg }: { people: Person[]; products: Pr
         <AddProductDialog key={addingProduct} open onClose={() => setAddingProduct(null)} onAdded={(product) => set('productId', product.id)} />
       )}
     </>
+  )
+}
+
+/** A value that can't be changed here, shown as text with a lock instead of a disabled control. */
+function LockedValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="mb-1 text-sm font-medium">{label}</p>
+      <p className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-surface-2 px-3 text-sm">
+        <Lock aria-hidden className="size-4 shrink-0 text-muted-fg" />
+        <span>{value}</span>
+        <span className="sr-only">(locked)</span>
+      </p>
+    </div>
   )
 }

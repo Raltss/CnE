@@ -27,6 +27,8 @@ const Account = page(() => import('./pages/Account'), 'Account')
 const Team = page(() => import('./pages/admin/Team'), 'Team')
 const PersonDetail = page(() => import('./pages/admin/PersonDetail'), 'PersonDetail')
 const Staff = page(() => import('./pages/admin/Staff'), 'Staff')
+const Calendar = page(() => import('./pages/Calendar'), 'Calendar')
+const Reports = page(() => import('./pages/Reports'), 'Reports')
 
 export const routes: RouteObject[] = [
   {
@@ -62,7 +64,11 @@ export const routes: RouteObject[] = [
       // Admins see these read-only (RLS gives them read access, the workflow functions refuse their writes).
       {
         element: <RoleGuard roles={['manager', 'admin']} />,
-        children: [{ path: 'packages', element: <PackagesList /> }],
+        children: [
+          { path: 'packages', element: <PackagesList /> },
+          { path: 'calendar', element: <Calendar /> },
+          { path: 'reports', element: <Reports /> },
+        ],
       },
       {
         element: <RoleGuard roles={['manager', 'editor', 'admin']} />,

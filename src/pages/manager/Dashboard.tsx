@@ -1,4 +1,4 @@
-import { CalendarClock, ChevronRight, Hourglass, Inbox, Play, RotateCcw, TriangleAlert, Users } from 'lucide-react'
+import { CalendarClock, ChevronRight, Hourglass, Inbox, Pause, Play, RotateCcw, Send, TriangleAlert, Users } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { KpiStat } from '../../components/domain/KpiStat'
@@ -19,7 +19,7 @@ import { useSession } from '../../session/context'
 /** How many rows a dashboard list shows before pointing to the full page. */
 const PREVIEW_ROWS = 5
 
-type Drill = 'review' | 'overdue' | 'due48' | 'active'
+type Drill = 'review' | 'client' | 'overdue' | 'due48' | 'active'
 
 export function ManagerDashboard() {
   const now = useNow()
@@ -57,7 +57,11 @@ export function ManagerDashboard() {
   const mineInQueue = queue.filter((p) => p.responsibleManagerId === me.id).length
   const overdue = active.filter((p) => isOverdue(p, now))
   const due48 = active.filter((p) => isDueWithin(p, now, 48 * HOUR_MS))
-  const workload = editorWorkload(people, active, now)
+  // Approved internally and waiting on the client's decision, longest waiting first.
+  const withClient = work
+    .data!.filter((p) => p.status === 'client_review')
+    .sort((a, b) => (a.latest?.submittedAt ?? '').localeCompare(b.latest?.submittedAt ?? ''))
+  const workload = editorWorkload(people, work.data!, now)
   const maxLoad = Math.max(1, ...workload.map((w) => w.active))
   const busyEditors = workload.filter((w) => w.active > 0).length
 
@@ -68,6 +72,13 @@ export function ManagerDashboard() {
       packages: queue,
       to: '/review',
       linkLabel: 'Open review queue',
+    },
+    client: {
+      title: 'With the client',
+      description: 'Approved internally and waiting on the client’s decision. Open one to record what the client said.',
+      packages: withClient,
+      to: '/packages?status=client_review',
+      linkLabel: 'Open in Packages',
     },
     overdue: {
       title: 'Overdue',
@@ -99,7 +110,7 @@ export function ManagerDashboard() {
     <>
       {header}
 
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-5">
         <KpiStat
           label="Awaiting review"
           value={queue.length}
@@ -107,6 +118,13 @@ export function ManagerDashboard() {
           icon={Inbox}
           tone="attention"
           onClick={() => setDrill('review')}
+        />
+        <KpiStat
+          label="With the client"
+          value={withClient.length}
+          hint={withClient.length ? 'Waiting on their decision' : 'Nothing waiting on clients'}
+          icon={Send}
+          onClick={() => setDrill('client')}
         />
         <KpiStat
           label="Overdue"
@@ -214,7 +232,7 @@ export function ManagerDashboard() {
                       <span aria-hidden className="mt-2 block h-1.5 overflow-hidden rounded-full bg-surface-2">
                         <span className="block h-full rounded-full bg-primary" style={{ width: `${(w.active / maxLoad) * 100}%` }} />
                       </span>
-                      {(w.overdue > 0 || w.needsChanges > 0) && (
+                      {(w.overdue > 0 || w.needsChanges > 0 || w.onHold > 0) && (
                         <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold tabular-nums">
                           {w.overdue > 0 && (
                             <span className="inline-flex items-center gap-1 text-danger">
@@ -226,6 +244,12 @@ export function ManagerDashboard() {
                             <span className="inline-flex items-center gap-1 text-st-feedback">
                               <RotateCcw aria-hidden className="size-3.5" />
                               {w.needsChanges} needs changes
+                            </span>
+                          )}
+                          {w.onHold > 0 && (
+                            <span className="inline-flex items-center gap-1 text-st-hold">
+                              <Pause aria-hidden className="size-3.5" />
+                              {w.onHold} on hold
                             </span>
                           )}
                         </span>

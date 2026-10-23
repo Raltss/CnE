@@ -1,4 +1,4 @@
-import { ChevronRight, Inbox, Play, RotateCcw, Timer, TriangleAlert, UserRoundCheck, Users } from 'lucide-react'
+import { ChevronRight, Inbox, Pause, Play, RotateCcw, Timer, TriangleAlert, UserRoundCheck, Users } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { KpiStat } from '../../components/domain/KpiStat'
@@ -49,7 +49,7 @@ export function AdminOverview() {
   // No manager is "first" for an admin, so the queue is simply oldest submission first.
   const pending = reviewQueue(active, '')
   const clockedIn = open.data!
-  const workload = editorWorkload(people, active, now)
+  const workload = editorWorkload(people, work.data!, now)
   const maxLoad = Math.max(1, ...workload.map((w) => w.active))
   const managersLoad = managerLoad(people, active, decisions.data!, now)
   const waiting = accounts.data!.filter((a) => accessOf(a) === 'pending').length
@@ -148,7 +148,7 @@ export function AdminOverview() {
                       <span aria-hidden className="mt-2 block h-1.5 overflow-hidden rounded-full bg-surface-2">
                         <span className="block h-full rounded-full bg-primary" style={{ width: `${(w.active / maxLoad) * 100}%` }} />
                       </span>
-                      {(w.overdue > 0 || w.needsChanges > 0 || w.awaitingReview > 0) && (
+                      {(w.overdue > 0 || w.needsChanges > 0 || w.awaitingReview > 0 || w.onHold > 0) && (
                         <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold tabular-nums">
                           {w.overdue > 0 && (
                             <span className="inline-flex items-center gap-1 text-danger">
@@ -166,6 +166,12 @@ export function AdminOverview() {
                             <span className="inline-flex items-center gap-1 text-st-feedback">
                               <RotateCcw aria-hidden className="size-3.5" />
                               {w.needsChanges} needs changes
+                            </span>
+                          )}
+                          {w.onHold > 0 && (
+                            <span className="inline-flex items-center gap-1 text-st-hold">
+                              <Pause aria-hidden className="size-3.5" />
+                              {w.onHold} on hold
                             </span>
                           )}
                         </span>

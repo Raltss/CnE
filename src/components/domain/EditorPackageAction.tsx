@@ -33,6 +33,13 @@ export function EditorPackageAction({ pkg }: { pkg: PackageSummary }) {
         {pkg.status === 'apply_feedback' ? 'Resubmit' : 'Submit'}
       </Link>
     )
+  // The round can't be completed without the final file.
+  if ((pkg.status === 'submitted' || pkg.status === 'client_review') && pkg.latest && !pkg.latest.deliveryLink)
+    return (
+      <Link to={`/packages/${pkg.id}`} className={buttonClasses('primary', 'sm')}>
+        Add delivery link
+      </Link>
+    )
   return (
     <Link to={`/packages/${pkg.id}`} className={buttonClasses('secondary', 'sm')}>
       Open

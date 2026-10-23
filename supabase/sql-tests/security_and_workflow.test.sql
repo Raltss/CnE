@@ -405,7 +405,27 @@ select test.expect(
 select test.expect((select count(*) from public.notifications) = 0, 'a non-responsible manager got no submission notifications');
 select test.as_user('00000000-0000-0000-0000-000000000001');
 select test.expect_error($$select public.update_package(current_setting('test.pkg')::uuid, 'X', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000011',
-  '00000000-0000-0000-0000-000000000001', now() + interval '3 days')$$, 'Completed packages', 'completed packages cannot be edited');
+  '00000000-0000-0000-0000-000000000001', now() + interval '3 days')$$, 'editor and deadline', 'a completed package''s deadline cannot change');
+select test.expect_error($$select public.update_package(current_setting('test.pkg')::uuid, 'X', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '', '00000000-0000-0000-0000-000000000012',
+  '00000000-0000-0000-0000-000000000001', (select deadline from public.packages where id = current_setting('test.pkg')::uuid))$$,
+  'editor and deadline', 'a completed package cannot be reassigned');
+select public.update_package(current_setting('test.pkg')::uuid, 'Holiday Blend 30s Hero Spot (final)', current_setting('test.product')::uuid,
+  'Warm, cozy tone.', 'https://docs.google.com/document/d/brief', array['https://vimeo.com/ref'], '16:9 master',
+  '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001',
+  (select deadline from public.packages where id = current_setting('test.pkg')::uuid));
+select test.expect(
+  (select title = 'Holiday Blend 30s Hero Spot (final)' and status = 'completed' from public.packages where id = current_setting('test.pkg')::uuid),
+  'a completed package''s details can be corrected and it stays completed'
+);
+-- The app sends instants to the millisecond; the stored deadline has microseconds.
+select public.update_package(current_setting('test.pkg')::uuid, 'Holiday Blend 30s Hero Spot', current_setting('test.product')::uuid,
+  'Warm, cozy tone.', 'https://docs.google.com/document/d/brief', array['https://vimeo.com/ref'], '16:9 master',
+  '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001',
+  (select date_trunc('milliseconds', deadline) from public.packages where id = current_setting('test.pkg')::uuid));
+select test.expect(
+  (select count(*) from public.activity where package_id = current_setting('test.pkg')::uuid and type = 'deadline_changed') = 0,
+  'a deadline sent back at millisecond precision counts as unchanged'
+);
 
 select test.as_user('00000000-0000-0000-0000-000000000011');
 select test.expect((select count(*) from public.notifications where type = 'approved') = 1, 'editor is notified of approval');
@@ -543,6 +563,329 @@ select test.expect(
   (select count(*) from public.packages where editor_id = '00000000-0000-0000-0000-000000000012') = 1,
   'their packages and history remain for managers'
 );
+
+-- ── Package lifecycle: hold, resume, cancel, archive, reopen, delete ────────
+-- Manager 1 and editor 11 are active; editor 12 was deactivated above.
+
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select set_config('test.pkg3', public.create_package(
+  'Lifecycle Reel', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '',
+  '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001', now() + interval '2 days'
+)::text, true);
+
+-- Only managers change the lifecycle.
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select test.expect_error(format('select public.hold_package(%L, null)', current_setting('test.pkg3')), 'Only managers', 'editors cannot put packages on hold');
+select test.expect_error(format('select public.cancel_package(%L, null)', current_setting('test.pkg3')), 'Only managers', 'editors cannot cancel packages');
+select test.expect_error(format('select public.delete_package(%L)', current_setting('test.pkg3')), 'Only managers', 'editors cannot delete packages');
+select test.expect_error(format('select public.update_product(%L, %L, null)', current_setting('test.product'), 'X'), 'Only managers', 'editors cannot edit products');
+select test.as_user('00000000-0000-0000-0000-00000000000a');
+select test.expect_error(format('select public.hold_package(%L, null)', current_setting('test.pkg3')), 'Only managers', 'admin cannot put packages on hold');
+select test.expect_error(format('select public.resume_package(%L)', current_setting('test.pkg3')), 'Only managers', 'admin cannot resume packages');
+select test.expect_error(format('select public.cancel_package(%L, null)', current_setting('test.pkg3')), 'Only managers', 'admin cannot cancel packages');
+select test.expect_error(format('select public.archive_package(%L)', current_setting('test.pkg')), 'Only managers', 'admin cannot archive packages');
+select test.expect_error(format('select public.unarchive_package(%L)', current_setting('test.pkg')), 'Only managers', 'admin cannot unarchive packages');
+select test.expect_error(format('select public.reopen_package(%L, null)', current_setting('test.pkg')), 'Only managers', 'admin cannot reopen packages');
+select test.expect_error(format('select public.delete_package(%L)', current_setting('test.pkg3')), 'Only managers', 'admin cannot delete packages');
+select test.expect_error(format('select public.update_product(%L, %L, null)', current_setting('test.product'), 'X'), 'Only managers', 'admin cannot edit products');
+select test.expect_error(format('delete from public.packages where id = %L', current_setting('test.pkg3')), 'permission denied', 'packages cannot be deleted directly');
+
+-- Hold remembers the status, and Resume goes back to it.
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select public.hold_package(current_setting('test.pkg3')::uuid, null);
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select test.expect_error(format('select public.start_work(%L)', current_setting('test.pkg3')), 'on hold', 'a package on hold cannot be started');
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select public.resume_package(current_setting('test.pkg3')::uuid);
+select test.expect((select status = 'assigned' from public.packages where id = current_setting('test.pkg3')::uuid), 'resume from Assigned goes back to Assigned');
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select public.start_work(current_setting('test.pkg3')::uuid);
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select test.expect_error(format('select public.hold_package(%L, %L)', current_setting('test.pkg3'), repeat('x', 501)), 'under 500', 'a hold reason over 500 characters is refused');
+select public.hold_package(current_setting('test.pkg3')::uuid, '  Client paused the campaign ');
+select test.expect(
+  (select status = 'on_hold' and previous_status = 'in_progress' from public.packages where id = current_setting('test.pkg3')::uuid),
+  'hold remembers the previous status'
+);
+select test.expect(
+  exists (select 1 from public.activity where package_id = current_setting('test.pkg3')::uuid and type = 'held' and message = 'Put on hold: Client paused the campaign'),
+  'the hold and its reason are in the activity history'
+);
+select test.expect_error(format('select public.hold_package(%L, null)', current_setting('test.pkg3')), 'already on hold', 'a package on hold cannot be held again');
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select test.expect((select count(*) from public.notifications where type = 'on_hold' and message like '%Client paused the campaign') = 1,
+  'the editor is notified of the hold, with the reason');
+select test.expect_error(format('select public.submit_for_review(%L, %L, %L)', current_setting('test.pkg3'), 'https://f.io/x', ''),
+  'isn’t waiting', 'a package on hold cannot be submitted');
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select public.resume_package(current_setting('test.pkg3')::uuid);
+select test.expect(
+  (select status = 'in_progress' and previous_status is null from public.packages where id = current_setting('test.pkg3')::uuid),
+  'resume goes back to the exact previous status'
+);
+select test.expect_error(format('select public.resume_package(%L)', current_setting('test.pkg3')), 'isn’t on hold', 'only packages on hold can be resumed');
+
+-- Started work can't be deleted, only cancelled; current work can't be archived or reopened.
+select test.expect_error(format('select public.delete_package(%L)', current_setting('test.pkg3')), 'haven’t been started', 'a started package cannot be deleted');
+select test.expect_error(format('select public.archive_package(%L)', current_setting('test.pkg3')), 'Only completed or cancelled', 'current work cannot be archived');
+select test.expect_error(format('select public.reopen_package(%L, null)', current_setting('test.pkg3')), 'Only completed', 'current work cannot be reopened');
+
+-- Cancel, then archive and unarchive back to Cancelled.
+select public.cancel_package(current_setting('test.pkg3')::uuid, null);
+select test.expect((select status = 'cancelled' from public.packages where id = current_setting('test.pkg3')::uuid), 'a package can be cancelled');
+select test.expect_error(format('select public.cancel_package(%L, null)', current_setting('test.pkg3')), 'already cancelled', 'a cancelled package cannot be cancelled again');
+select test.expect_error(format('select public.hold_package(%L, null)', current_setting('test.pkg3')), 'Only current work', 'a cancelled package cannot be put on hold');
+select public.archive_package(current_setting('test.pkg3')::uuid);
+select test.expect(
+  (select status = 'archived' and previous_status = 'cancelled' from public.packages where id = current_setting('test.pkg3')::uuid),
+  'a cancelled package can be archived'
+);
+select test.expect_error($$select public.update_package(current_setting('test.pkg3')::uuid, 'Lifecycle Reel 2', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '',
+  '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001', (select deadline from public.packages where id = current_setting('test.pkg3')::uuid))$$,
+  'Unarchive', 'an archived package cannot be edited');
+select public.unarchive_package(current_setting('test.pkg3')::uuid);
+select test.expect(
+  (select status = 'cancelled' and previous_status is null from public.packages where id = current_setting('test.pkg3')::uuid),
+  'unarchive goes back to Cancelled'
+);
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select test.expect((select count(*) from public.notifications where type = 'cancelled' and package_id = current_setting('test.pkg3')::uuid) = 1,
+  'the editor is notified of the cancellation');
+
+-- Reopen a completed package: it goes to Apply Feedback and keeps the approved round.
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select test.expect_error(format('select public.cancel_package(%L, null)', current_setting('test.pkg')), 'Completed and archived', 'a completed package cannot be cancelled');
+select public.reopen_package(current_setting('test.pkg')::uuid, 'Client wants a shorter cut');
+select test.expect(
+  (select status = 'apply_feedback' and completed_at is null from public.packages where id = current_setting('test.pkg')::uuid)
+  and (select outcome = 'approved' from public.submissions where package_id = current_setting('test.pkg')::uuid and round = 2),
+  'reopen sends the package back for changes and keeps the approved round'
+);
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select test.expect((select count(*) from public.notifications where type = 'reopened' and message like '%shorter cut') = 1,
+  'the editor is notified of the reopen, with the note');
+select test.expect(
+  public.submit_for_review(current_setting('test.pkg')::uuid, 'https://f.io/r3', 'https://drive.google.com/r3') = 3,
+  'after a reopen the editor resubmits as a new round'
+);
+
+-- Archive a completed package, and unarchive it back to Completed.
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select public.approve_package(current_setting('test.pkg')::uuid);
+select public.archive_package(current_setting('test.pkg')::uuid);
+select test.expect_error(format('select public.archive_package(%L)', current_setting('test.pkg')), 'already archived', 'an archived package cannot be archived again');
+select test.expect_error(format('select public.reopen_package(%L, null)', current_setting('test.pkg')), 'Only completed', 'an archived package cannot be reopened');
+select public.unarchive_package(current_setting('test.pkg')::uuid);
+select test.expect((select status = 'completed' from public.packages where id = current_setting('test.pkg')::uuid), 'unarchive goes back to Completed');
+
+-- A package whose editor was deactivated can still be corrected, but not given to them again.
+select public.update_package(current_setting('test.pkg2')::uuid, 'Spin Class Teaser v2', 'd0000000-0000-0000-0000-000000000002', '', '', '{}', '',
+  '00000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000002',
+  (select deadline from public.packages where id = current_setting('test.pkg2')::uuid));
+select test.expect((select title = 'Spin Class Teaser v2' from public.packages where id = current_setting('test.pkg2')::uuid),
+  'a package can be corrected while its editor is deactivated');
+select test.expect_error($$select public.update_package(current_setting('test.pkg3')::uuid, 'Lifecycle Reel', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '',
+  '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001', now() + interval '9 days')$$,
+  'editor and deadline', 'a cancelled package''s deadline cannot change');
+select set_config('test.pkg4', public.create_package(
+  'Typo Package', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '',
+  '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001', now() + interval '2 days'
+)::text, true);
+select test.expect_error($$select public.update_package(current_setting('test.pkg4')::uuid, 'Typo Package', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '',
+  '00000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000001', (select deadline from public.packages where id = current_setting('test.pkg4')::uuid))$$,
+  'active editor', 'a package cannot be reassigned to a deactivated editor');
+
+-- Delete: only a package nobody has started. The editor and responsible manager get a notice with no link.
+select public.update_package(current_setting('test.pkg4')::uuid, 'Typo Package', 'd0000000-0000-0000-0000-000000000001', '', '', '{}', '',
+  '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000002', (select deadline from public.packages where id = current_setting('test.pkg4')::uuid));
+select public.delete_package(current_setting('test.pkg4')::uuid);
+reset role;
+select test.as_trusted();
+select test.expect(
+  (select count(*) from public.packages where id = current_setting('test.pkg4')::uuid) = 0
+  and (select count(*) from public.activity where package_id = current_setting('test.pkg4')::uuid) = 0
+  and (select count(*) from public.notifications where package_id = current_setting('test.pkg4')::uuid) = 0,
+  'deleting a package removes it with its history and notices'
+);
+select test.expect(
+  (select count(*) from public.notifications where type = 'deleted' and package_id is null and message like '%Typo Package was deleted by %'
+     and recipient_id in ('00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000002')) = 2,
+  'the editor and responsible manager are told about the deletion'
+);
+select test.expect((select count(*) from public.notifications where type = 'deleted' and recipient_id = '00000000-0000-0000-0000-000000000001') = 0,
+  'the manager who deleted it is not notified');
+set local role authenticated;
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select test.expect((select count(*) from public.notifications where type = 'deleted') = 1, 'the editor can read the deletion notice');
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select test.expect_error(format('select public.delete_package(%L)', current_setting('test.pkg4')), 'no longer exists', 'a deleted package cannot be deleted twice');
+
+-- Products can be renamed, with the same rules as adding one.
+select set_config('test.product2', public.create_product('Gym Promos')::text, true);
+select test.expect_error(format('select public.update_product(%L, %L, null)', current_setting('test.product2'), ' brand reels '), 'already exists',
+  'a product cannot take another product''s name, ignoring case');
+select public.update_product(current_setting('test.product')::uuid, ' brand reels ', null);
+select test.expect((select name = 'brand reels' from public.products where id = current_setting('test.product')::uuid),
+  'a product can be renamed, including to a different case of its own name');
+select test.expect_error(format('select public.update_product(%L, %L, null)', current_setting('test.product2'), '  '), 'Enter the product name', 'an empty product name is refused on rename');
+select test.expect_error(format('select public.update_product(%L, %L, null)', 'd0000000-0000-0000-0000-000000000099', 'Ghost'), 'no longer exists', 'renaming an unknown product fails');
+
+-- ── Client review, revision allowances, first delivery ──────────────────────
+
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select test.expect_error($$select public.create_product('Retainer Shorts', 21)$$, 'from 0 to 20', 'included revisions over 20 are refused');
+select set_config('test.product3', public.create_product('Retainer Shorts', 1)::text, true);
+select test.expect((select included_revisions = 1 from public.products where id = current_setting('test.product3')::uuid),
+  'a product can include a number of client revisions');
+select public.update_product(current_setting('test.product3')::uuid, 'Retainer Shorts', null);
+select test.expect((select included_revisions is null from public.products where id = current_setting('test.product3')::uuid),
+  'the allowance can be cleared (no limit)');
+select public.update_product(current_setting('test.product3')::uuid, 'Retainer Shorts', 1);
+select test.expect_error(format('select public.update_product(%L, %L, -1)', current_setting('test.product3'), 'Retainer Shorts'), 'from 0 to 20',
+  'a negative allowance is refused');
+
+select set_config('test.pkg5', public.create_package(
+  'Retainer Short #1', current_setting('test.product3')::uuid, '', '', '{}', '',
+  '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001', now() + interval '2 days'
+)::text, true);
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select public.start_work(current_setting('test.pkg5')::uuid);
+select public.submit_for_review(current_setting('test.pkg5')::uuid, 'https://f.io/retainer-r1', '');
+
+-- Only managers send work to the client and record the client's decision.
+select test.expect_error(format('select public.send_to_client(%L)', current_setting('test.pkg5')), 'Only managers', 'editors cannot send work to the client');
+select test.expect_error(format('select public.record_client_approval(%L)', current_setting('test.pkg5')), 'Only managers', 'editors cannot record client approval');
+select test.expect_error(format('select public.record_client_feedback(%L, null)', current_setting('test.pkg5')), 'Only managers', 'editors cannot record client feedback');
+select test.as_user('00000000-0000-0000-0000-00000000000a');
+select test.expect_error(format('select public.send_to_client(%L)', current_setting('test.pkg5')), 'Only managers', 'admin cannot send work to the client');
+select test.expect_error(format('select public.record_client_approval(%L)', current_setting('test.pkg5')), 'Only managers', 'admin cannot record client approval');
+select test.expect_error(format('select public.record_client_feedback(%L, null)', current_setting('test.pkg5')), 'Only managers', 'admin cannot record client feedback');
+select test.expect_error(format('select public.add_delivery_link(%L, %L)', current_setting('test.pkg5'), 'https://drive.google.com/x'),
+  'Only the assigned editor', 'admin cannot add a delivery link');
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select test.expect_error(format('select public.add_delivery_link(%L, %L)', current_setting('test.pkg5'), 'https://drive.google.com/x'),
+  'Only the assigned editor', 'managers cannot add a delivery link for the editor');
+select test.expect_error(format('select public.record_client_approval(%L)', current_setting('test.pkg5')), 'isn’t waiting on the client',
+  'client approval needs the package to be with the client');
+
+-- Sending to the client approves the round internally; no delivery link is needed yet.
+select public.send_to_client(current_setting('test.pkg5')::uuid);
+select test.expect(
+  (select status = 'client_review' and first_delivered_at is not null from public.packages where id = current_setting('test.pkg5')::uuid)
+  and (select outcome = 'with_client' and sent_to_client_at is not null and decided_by = '00000000-0000-0000-0000-000000000001'
+       from public.submissions where package_id = current_setting('test.pkg5')::uuid and round = 1),
+  'sending to the client marks the package With Client and records the first delivery'
+);
+select set_config('test.first_delivery', (select first_delivered_at::text from public.packages where id = current_setting('test.pkg5')::uuid), true);
+select test.expect_error(format('select public.send_to_client(%L)', current_setting('test.pkg5')), 'Only submitted', 'a package already with the client cannot be sent again');
+select test.expect_error(format('select public.request_feedback(%L, null)', current_setting('test.pkg5')), 'Only submitted',
+  'internal feedback is not used while the client reviews');
+select test.expect_error(format('select public.record_client_approval(%L)', current_setting('test.pkg5')), 'no delivery link yet',
+  'the client''s approval needs a delivery link');
+
+-- The editor adds the missing delivery link; the responsible manager is told.
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select test.expect((select count(*) from public.notifications where type = 'sent_to_client' and package_id = current_setting('test.pkg5')::uuid) = 1,
+  'the editor is told the round went to the client');
+select test.expect_error(format('select public.add_delivery_link(%L, %L)', current_setting('test.pkg5'), 'not a link'), 'full link', 'the delivery link must be a full link');
+select public.add_delivery_link(current_setting('test.pkg5')::uuid, ' https://drive.google.com/retainer-final-1 ');
+select test.expect(
+  (select delivery_link = 'https://drive.google.com/retainer-final-1' and review_link = 'https://f.io/retainer-r1'
+   from public.submissions where package_id = current_setting('test.pkg5')::uuid and round = 1),
+  'the editor adds the delivery link to the round, keeping its review link'
+);
+select test.expect_error(format('select public.add_delivery_link(%L, %L)', current_setting('test.pkg5'), 'https://drive.google.com/other'),
+  'already has a delivery link', 'an existing delivery link is never overwritten');
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select test.expect((select count(*) from public.notifications where type = 'delivery_added') = 1, 'the responsible manager is told about the delivery link');
+
+-- Client feedback goes back to the editor and counts against the product's allowance.
+select public.record_client_feedback(current_setting('test.pkg5')::uuid, ' Make the logo bigger ');
+select test.expect(
+  (select status = 'apply_feedback' from public.packages where id = current_setting('test.pkg5')::uuid)
+  and (select outcome = 'client_feedback' and client_decided_by = '00000000-0000-0000-0000-000000000001' and feedback_note = 'Make the logo bigger'
+       from public.submissions where package_id = current_setting('test.pkg5')::uuid and round = 1),
+  'client feedback sends the package back as Apply Feedback, with the note on the round'
+);
+select test.expect(
+  exists (select 1 from public.activity where package_id = current_setting('test.pkg5')::uuid and type = 'client_feedback'
+          and message = 'Client asked for changes on Round 1 (client revision 1): Make the logo bigger'),
+  'the first client revision is within the allowance'
+);
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select public.submit_for_review(current_setting('test.pkg5')::uuid, 'https://f.io/retainer-r2', 'https://drive.google.com/retainer-final-2');
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select public.send_to_client(current_setting('test.pkg5')::uuid);
+select public.record_client_feedback(current_setting('test.pkg5')::uuid, null);
+select test.expect(
+  exists (select 1 from public.activity where package_id = current_setting('test.pkg5')::uuid and type = 'client_feedback'
+          and message = 'Client asked for changes on Round 2 (client revision 2, 1 over the 1 included)'),
+  'a client revision over the allowance is called out in the history'
+);
+select test.expect((select first_delivered_at::text = current_setting('test.first_delivery') from public.packages where id = current_setting('test.pkg5')::uuid),
+  'later sends to the client keep the first delivery time');
+
+-- The client approves the next round: Completed.
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select public.submit_for_review(current_setting('test.pkg5')::uuid, 'https://f.io/retainer-r3', 'https://drive.google.com/retainer-final-3');
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select public.send_to_client(current_setting('test.pkg5')::uuid);
+select public.record_client_approval(current_setting('test.pkg5')::uuid);
+select test.expect(
+  (select status = 'completed' and completed_at is not null from public.packages where id = current_setting('test.pkg5')::uuid)
+  and (select outcome = 'approved' and client_decided_at is not null from public.submissions where package_id = current_setting('test.pkg5')::uuid and round = 3)
+  and (select array_agg(outcome::text order by round) from public.submissions where package_id = current_setting('test.pkg5')::uuid)
+      = array['client_feedback', 'client_feedback', 'approved'],
+  'the client''s approval completes the package and every round keeps its outcome'
+);
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select test.expect(
+  (select count(*) from public.notifications where package_id = current_setting('test.pkg5')::uuid and type = 'client_feedback') = 2
+  and (select count(*) from public.notifications where package_id = current_setting('test.pkg5')::uuid and type = 'client_approved') = 1,
+  'the editor is told about each client decision'
+);
+select test.expect_error(format('select public.add_delivery_link(%L, %L)', current_setting('test.pkg5'), 'https://drive.google.com/late'),
+  'only while', 'a delivery link cannot be added after completion');
+select test.expect((select count(*) from public.submissions where package_id = current_setting('test.pkg5')::uuid and client_decided_at is not null) = 3,
+  'the editor can read the client decisions on their rounds');
+
+-- Approve and complete (no client review) also records the first delivery.
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select set_config('test.pkg6', public.create_package(
+  'Internal Cut', current_setting('test.product3')::uuid, '', '', '{}', '',
+  '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001', now() + interval '2 days'
+)::text, true);
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select public.start_work(current_setting('test.pkg6')::uuid);
+select public.submit_for_review(current_setting('test.pkg6')::uuid, '', 'https://drive.google.com/internal-final');
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select public.approve_package(current_setting('test.pkg6')::uuid);
+select test.expect(
+  (select status = 'completed' and first_delivered_at = completed_at from public.packages where id = current_setting('test.pkg6')::uuid),
+  'approving without client review completes the package and records the first delivery'
+);
+
+-- With Client can be put on hold (and resumes back to With Client) or cancelled.
+select set_config('test.pkg7', public.create_package(
+  'Paused With Client', current_setting('test.product3')::uuid, '', '', '{}', '',
+  '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001', now() + interval '2 days'
+)::text, true);
+select test.as_user('00000000-0000-0000-0000-000000000011');
+select public.start_work(current_setting('test.pkg7')::uuid);
+select public.submit_for_review(current_setting('test.pkg7')::uuid, 'https://f.io/paused', '');
+select test.as_user('00000000-0000-0000-0000-000000000001');
+select public.send_to_client(current_setting('test.pkg7')::uuid);
+select public.hold_package(current_setting('test.pkg7')::uuid, 'Client on vacation');
+select test.expect((select status = 'on_hold' and previous_status = 'client_review' from public.packages where id = current_setting('test.pkg7')::uuid),
+  'a package with the client can be put on hold');
+select public.resume_package(current_setting('test.pkg7')::uuid);
+select test.expect((select status = 'client_review' from public.packages where id = current_setting('test.pkg7')::uuid),
+  'resuming goes back to With Client');
+select test.expect(
+  exists (select 1 from public.activity where package_id = current_setting('test.pkg7')::uuid and message = 'Resumed (back to With Client)'),
+  'the history names the status it went back to');
+select public.cancel_package(current_setting('test.pkg7')::uuid, null);
+select test.expect((select status = 'cancelled' from public.packages where id = current_setting('test.pkg7')::uuid), 'a package with the client can be cancelled');
 
 reset role;
 rollback;

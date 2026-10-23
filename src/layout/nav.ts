@@ -1,6 +1,8 @@
 import {
   Bell,
   CalendarClock,
+  CalendarDays,
+  ChartColumn,
   Clock,
   FolderKanban,
   History,
@@ -33,7 +35,9 @@ export const NAV: Record<Role, NavItem[]> = {
     { to: '/overview', label: 'Overview', short: 'Overview', icon: LayoutDashboard },
     { to: '/team', label: 'Team', short: 'Team', icon: Users },
     { to: '/packages', label: 'Packages', short: 'Packages', icon: FolderKanban },
+    { to: '/calendar', label: 'Calendar', short: 'Calendar', icon: CalendarDays },
     { to: '/attendance', label: 'Attendance', short: 'Attendance', icon: Clock },
+    { to: '/reports', label: 'Reports', short: 'Reports', icon: ChartColumn },
     { to: '/staff', label: 'Staff & Roles', short: 'Staff', icon: UserCog, badge: 'pending' },
   ],
   manager: [
@@ -41,8 +45,10 @@ export const NAV: Record<Role, NavItem[]> = {
     { to: '/review', label: 'Review Queue', short: 'Review', icon: Inbox, badge: 'review' },
     { to: '/deadlines', label: 'Deadlines', short: 'Deadlines', icon: CalendarClock, badge: 'overdue' },
     { to: '/packages', label: 'Packages', short: 'Packages', icon: FolderKanban },
+    { to: '/calendar', label: 'Calendar', short: 'Calendar', icon: CalendarDays },
     { to: '/time-clock', label: 'Time Clock', short: 'Clock', icon: Timer },
     { to: '/attendance', label: 'Attendance', short: 'Attendance', icon: Clock },
+    { to: '/reports', label: 'Reports', short: 'Reports', icon: ChartColumn },
     { to: '/notifications', label: 'Notifications', short: 'Alerts', icon: Bell, badge: 'notifications' },
   ],
   editor: [

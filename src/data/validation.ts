@@ -1,4 +1,4 @@
-import type { FieldErrors, PackageInput, Person, Product, StaffAccount, StaffAccountInput, SubmissionInput } from './types'
+import type { FieldErrors, PackageInput, PackageStatus, Person, Product, StaffAccount, StaffAccountInput, SubmissionInput } from './types'
 
 export function isHttpUrl(value: string): boolean {
   try {
@@ -11,13 +11,17 @@ export function isHttpUrl(value: string): boolean {
 
 const URL_HINT = 'Enter a full link starting with https://'
 
+/** Statuses whose editor and deadline are fixed; same rule as update_package(). */
+export const FIXED_ASSIGNMENT_STATUSES: PackageStatus[] = ['completed', 'cancelled']
+export const FIXED_ASSIGNMENT_MESSAGE = 'The editor and deadline can’t change on a completed or cancelled package.'
+
 export type PackageField = keyof PackageInput | `referenceLinks.${number}`
 
 /** Same rules as private.validate_package(); the database checks them again. */
 export function validatePackageInput(
   directory: { people: Person[]; products: Product[] },
   input: PackageInput,
-  options: { previousDeadline?: string; now: Date },
+  options: { previousDeadline?: string; now: Date; previous?: { status: PackageStatus; editorId: string } },
 ): FieldErrors<PackageField> {
   const errors: FieldErrors<PackageField> = {}
   const title = input.title.trim()
@@ -36,7 +40,11 @@ export function validatePackageInput(
   const manager = directory.people.find((p) => p.id === input.responsibleManagerId)
   if (!manager || manager.role !== 'manager') errors.responsibleManagerId = 'Choose a responsible manager.'
 
-  if (!input.deadline) errors.deadline = 'Set the final deadline.'
+  const fixed = options.previous && FIXED_ASSIGNMENT_STATUSES.includes(options.previous.status)
+  if (fixed && input.editorId !== options.previous?.editorId) errors.editorId = FIXED_ASSIGNMENT_MESSAGE
+
+  if (fixed && input.deadline !== options.previousDeadline) errors.deadline = FIXED_ASSIGNMENT_MESSAGE
+  else if (!input.deadline) errors.deadline = 'Set the final deadline.'
   else {
     const due = new Date(input.deadline)
     if (Number.isNaN(due.getTime())) errors.deadline = 'Enter a valid date and time.'
@@ -59,12 +67,25 @@ export function validateSubmissionInput(input: SubmissionInput): FieldErrors<key
 // ── Products ────────────────────────────────────────────────────────────────
 
 /** Same rules as public.create_product(): a name of up to 80 characters, unique ignoring case. */
-export function validateProductName(products: Product[], name: string): string | undefined {
+/** Same rules as create_product() and update_product(); `exceptId` is the product being edited. */
+export function validateProductName(products: Product[], name: string, exceptId?: string): string | undefined {
   const clean = name.trim()
   if (!clean) return 'Enter the product name.'
   if (clean.length > 80) return 'Keep the product name under 80 characters.'
-  if (products.some((p) => p.name.trim().toLowerCase() === clean.toLowerCase())) return `A product called “${clean}” already exists.`
+  if (products.some((p) => p.id !== exceptId && p.name.trim().toLowerCase() === clean.toLowerCase())) return `A product called “${clean}” already exists.`
   return undefined
+}
+
+/**
+ * Client revisions included with a product, as typed: empty means no limit. Same rule as
+ * private.check_included_revisions(). Returns the number (or null) and an error, if any.
+ */
+export function validateIncludedRevisions(value: string): { value: number | null; error?: string } {
+  const clean = value.trim()
+  if (!clean) return { value: null }
+  const n = Number(clean)
+  if (!Number.isInteger(n) || n < 0 || n > 20) return { value: null, error: 'Enter a number of revisions from 0 to 20, or leave it empty for no limit.' }
+  return { value: n }
 }
 
 // ── Accounts and passwords ──────────────────────────────────────────────────

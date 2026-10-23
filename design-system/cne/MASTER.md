@@ -12,6 +12,8 @@ Changes from the raw generator output (approved in the proposal):
 - A darker teal primary (`#0F766E`) with **white** text (5.4:1), instead of `#0D9488` with black text.
 - The "Product Demo + Features" landing pattern and the GSAP scroll reveal are dropped. This is an internal tool, with no scroll animation.
 
+**Revised 2026-10-23 at the user's request:** a warm palette (terracotta on cream, warm browns in dark), a theme choice (Light / Dark / Match device), and new fonts (Nunito Sans + Fraunces). Palette direction from UI UX Pro Max's "warm terracotta + cream" palette; fonts from its "Soft Rounded" pairing (Nunito Sans body) plus Fraunces for titles. Every pair below was checked for AA contrast.
+
 ---
 
 ## Color tokens
@@ -20,18 +22,29 @@ Components use semantic tokens only (Tailwind utilities such as `bg-surface`, `t
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `--color-primary` | `#0F766E` | `#2DD4BF` | Primary actions, active nav, links |
-| `--color-on-primary` | `#FFFFFF` | `#042F2E` | Text on primary |
-| `--color-accent` | `#C2410C` | `#FB923C` | Needs-attention highlights |
-| `--color-bg` | `#F8FAFC` | `#0B1120` | App background |
-| `--color-surface` | `#FFFFFF` | `#111827` | Cards, tables, dialogs |
-| `--color-surface-2` | `#F1F5F9` | `#1F2937` | Table headers, subtle fills |
-| `--color-fg` | `#0F172A` | `#F1F5F9` | Body text |
-| `--color-muted-fg` | `#475569` | `#94A3B8` | Secondary text |
-| `--color-border` | `#E2E8F0` | `#1F2937` | Dividers, inputs |
-| `--color-ring` | `#0F766E` | `#2DD4BF` | Focus rings |
-| `--color-danger` | `#B91C1C` | `#F87171` | Errors, overdue |
-| `--color-success` | `#15803D` | `#4ADE80` | Success toasts |
+| `--color-primary` | `#B4471F` | `#F0956B` | Primary actions, active nav, links |
+| `--color-on-primary` | `#FFFFFF` | `#2B1208` | Text on primary |
+| `--color-accent` | `#A15C07` | `#F5B94A` | Needs-attention highlights (count badges) |
+| `--color-bg` | `#FAF6F1` | `#1A1512` | App background |
+| `--color-surface` | `#FFFDFA` | `#221C18` | Cards, tables, dialogs |
+| `--color-surface-2` | `#F3ECE3` | `#2D2520` | Table headers, subtle fills |
+| `--color-fg` | `#2A211B` | `#F4ECE3` | Body text |
+| `--color-muted-fg` | `#6E5F53` | `#B8A796` | Secondary text |
+| `--color-border` | `#E7DDD1` | `#3A3029` | Dividers |
+| `--color-border-strong` | `#A08F80` | `#7A6858` | Input and secondary-button borders (3:1) |
+| `--color-ring` | `#B4471F` | `#F0956B` | Focus rings |
+| `--color-danger` | `#B42318` | `#F58A7C` | Errors, overdue |
+| `--color-success` | `#2B7330` | `#7FCF83` | Success toasts |
+| `--color-chart-1` | `#2A78D6` | `#3987E5` | Chart series 1 (Reports: internal revisions) |
+| `--color-chart-2` | `#EB6834` | `#D95926` | Chart series 2 (Reports: client revisions) |
+
+Chart colors follow the dataviz method: categorical slots 1–2 of its reference palette, validated with its palette checks against `--color-surface` in each theme (CVD ΔE ≥ 24, normal-vision ΔE ≥ 31, ≥ 3:1 contrast). Values and labels stay in text tokens; every chart has a legend with direct labels, and tables repeat the numbers.
+
+### Theme
+
+- `data-theme="light" | "dark"` on `<html>` picks the token set. An inline script in `index.html` sets it before the first paint; `src/lib/theme.ts` keeps it in step afterwards.
+- The choice is per browser (`localStorage` key `cne-theme`): Light, Dark, or Match device (the default, following `prefers-color-scheme` live).
+- The top bar and the sign-in screens have a one-tap light/dark toggle; Your account has the three-way choice.
 
 ### Status colors
 
@@ -39,19 +52,21 @@ A status always shows an **icon and a text label**, never color alone. Each stat
 
 | Status | Color | Icon (lucide) |
 |---|---|---|
-| Assigned | slate `#475569` | `Circle` |
+| Assigned | warm gray `#5C4F45` | `Circle` |
 | In Progress | blue `#1D4ED8` | `Play` |
 | Submitted | violet `#6D28D9` | `Upload` |
-| Apply Feedback | orange `#C2410C` | `RotateCcw` |
-| Completed | green `#15803D` | `Check` |
-| On Hold | amber `#B45309` | `Pause` |
-| Cancelled | gray `#6B7280` | `X` |
-| Archived | gray `#6B7280` | `Archive` |
-| Overdue (modifier) | red `#B91C1C` | `TriangleAlert` |
+| With Client | teal `#0E6A80` (dark `#7DD3E8`) | `Send` |
+| Apply Feedback | orange `#B13C0A` | `RotateCcw` |
+| Completed | green `#2B7330` | `Check` |
+| On Hold | amber `#975106` | `Pause` |
+| Cancelled | warm gray `#6B5F56` | `X` |
+| Archived | warm gray `#6B5F56` | `Archive` |
+| Overdue (modifier) | red `#B42318` | `TriangleAlert` |
 
 ## Typography
 
-- **Plus Jakarta Sans** 400/500/600/700 (Google Fonts) for all text.
+- **Nunito Sans** 400/500/600/700 (Google Fonts) for all UI text. It has tabular figures, so `tabular-nums` works.
+- **Fraunces** 600–700 for `h1` page titles and the CnE wordmark (`font-display`) only. Never for tables, labels, or body text.
 - `tabular-nums` for numbers, times, counts, and durations.
 - Scale: 12 (meta) / 14 (table body, dense UI) / 16 (body, inputs) / 18 / 20 / 24 / 30. Line height 1.5 for body, 1.25 for headings.
 - Inputs use 16px text so iOS doesn't zoom on focus.

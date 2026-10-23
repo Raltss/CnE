@@ -1,4 +1,5 @@
 import {
+  Archive,
   ArrowLeft,
   Check,
   ChevronRight,
@@ -7,24 +8,31 @@ import {
   Eye,
   Hourglass,
   Link2,
+  Pause,
   Pencil,
   Play,
   RotateCcw,
   SearchX,
+  Send,
   ShieldAlert,
+  TriangleAlert,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import { ActivityTimeline } from '../components/domain/ActivityTimeline'
+import { APPROVE_COPY, type ApproveMode } from '../components/domain/approve'
+import { ApproveOptions } from '../components/domain/ApproveOptions'
+import { AddDeliveryLinkForm, ClientDecisionActions } from '../components/domain/ClientReviewActions'
 import { DeadlineBadge } from '../components/domain/DeadlineBadge'
 import { ViewOnlyBanner } from '../components/domain/ViewOnlyBanner'
 import { LinkField } from '../components/domain/LinkField'
+import { PackageLifecycleActions } from '../components/domain/PackageLifecycleActions'
 import { OverdueBadge, StatusBadge } from '../components/domain/StatusBadge'
 import { SubmissionForm } from '../components/domain/SubmissionForm'
 import { SubmissionHistory } from '../components/domain/SubmissionHistory'
 import { Callout } from '../components/ui/Callout'
-import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Dialog } from '../components/ui/Dialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { Field } from '../components/ui/Field'
@@ -34,9 +42,11 @@ import { useToast } from '../components/ui/toast-context'
 import { api } from '../data/api'
 import { useNow } from '../data/hooks'
 import { pageStatus, useDirectory, usePackage } from '../data/queries'
-import { approvalBlocker, isOverdue, type Lookup } from '../data/selectors'
-import type { Person, WorkPackage } from '../data/types'
+import { clientRevisions, isOverdue, revisionSummary, type Lookup } from '../data/selectors'
+import type { ActivityEvent, ActivityType, Person, Product, Submission, WorkPackage } from '../data/types'
 import { HOME } from '../layout/nav'
+import { backState, useBack } from '../lib/back'
+import { STATUS_META } from '../lib/status'
 import { buttonClasses, cardClasses, cx, fieldAria, inputClasses } from '../lib/styles'
 import { formatDateTime } from '../lib/time'
 import { useSession } from '../session/context'
@@ -46,8 +56,10 @@ export function PackageDetail() {
   const now = useNow()
   const { me } = useSession()
   const detail = usePackage(id)
-  const { lookup, queries } = useDirectory()
-  const back = me.role === 'editor' ? { to: HOME.editor, label: 'My work' } : { to: '/packages', label: 'Packages' }
+  const { lookup, products, queries } = useDirectory()
+  // Back to the page that opened this one (e.g. the filtered Packages list), else the role's list.
+  const back = useBack(me.role === 'editor' ? { to: HOME.editor, label: 'My work' } : { to: '/packages', label: 'Packages' })
+  const location = useLocation()
 
   const status = pageStatus(detail, ...queries)
   if (status.pending || status.error) return <PageStatus {...status} />
@@ -59,7 +71,11 @@ export function PackageDetail() {
         icon={me.role === 'editor' ? ShieldAlert : SearchX}
         title={me.role === 'editor' ? 'Package not found, or not assigned to you' : 'Package not found'}
         tone="error"
-        action={<Link to={back.to} className={buttonClasses('primary')}>Back to {back.label.toLowerCase()}</Link>}
+        action={
+          <Link to={back.to} onClick={back.onClick} className={buttonClasses('primary')}>
+            Back to {back.label.toLowerCase()}
+          </Link>
+        }
       >
         {me.role === 'editor' ? 'Editors can open only their own packages. It may have been reassigned to another editor.' : 'The link may be wrong.'}
       </EmptyState>
@@ -68,10 +84,12 @@ export function PackageDetail() {
   const { pkg, rounds: roundList, activity } = detail.data
   const rounds = roundList.length
   const latest = roundList[0] ?? null
+  const product = products.find((p) => p.id === pkg.productId)
+  const revisions = clientRevisions(roundList, product?.includedRevisions ?? null)
 
   return (
     <>
-      <Link to={back.to} className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+      <Link to={back.to} onClick={back.onClick} className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
         <ArrowLeft aria-hidden className="size-4" />
         {back.label}
       </Link>
@@ -100,15 +118,15 @@ export function PackageDetail() {
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={pkg.status} />
             {isOverdue(pkg, now) && <OverdueBadge />}
-            {me.role === 'manager' && pkg.status !== 'completed' && (
-              <Link to={`/packages/${pkg.id}/edit`} className={buttonClasses('secondary', 'sm')}>
+            {me.role === 'manager' && pkg.status !== 'archived' && (
+              <Link to={`/packages/${pkg.id}/edit`} state={backState(location, 'Package')} className={buttonClasses('secondary', 'sm')}>
                 <Pencil aria-hidden className="size-4" />
                 Edit
               </Link>
             )}
           </div>
         </div>
-        <dl className="mt-4 grid grid-cols-2 gap-4 text-sm lg:grid-cols-4">
+        <dl className="mt-4 grid grid-cols-2 gap-4 text-sm lg:grid-cols-5">
           <div>
             <dt className="text-xs font-semibold text-muted-fg">Editor</dt>
             <dd>{lookup.personName(pkg.editorId)}</dd>
@@ -127,17 +145,25 @@ export function PackageDetail() {
             <dt className="text-xs font-semibold text-muted-fg">Submission rounds</dt>
             <dd className="tabular-nums">{rounds || 'None yet'}</dd>
           </div>
+          <div>
+            <dt className="text-xs font-semibold text-muted-fg">Client revisions</dt>
+            <dd className={cx('flex items-center gap-1 tabular-nums', revisions.extra > 0 && 'font-semibold text-warning')}>
+              {revisions.extra > 0 && <TriangleAlert aria-hidden className="size-4 shrink-0" />}
+              {revisions.used === 0 && revisions.included === null ? 'None yet' : revisionSummary(revisions.used, revisions.included)}
+            </dd>
+          </div>
         </dl>
       </header>
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-5 lg:order-2">
           <Section title="Actions">
-            <ActionPanel lookup={lookup} pkg={pkg} me={me} />
+            <ActionPanel lookup={lookup} pkg={pkg} me={me} rounds={roundList} product={product} />
           </Section>
         </div>
 
         <div className="flex min-w-0 flex-col gap-5 lg:order-1 lg:col-span-2">
+          <LifecycleCallout pkg={pkg} activity={activity} lookup={lookup} />
           {pkg.status === 'apply_feedback' && latest?.outcome === 'feedback' && (
             <Callout tone="warning" title={`Feedback requested on Round ${latest.round}`}>
               {latest.feedbackNote ? (
@@ -148,6 +174,12 @@ export function PackageDetail() {
                 'No note added.'
               )}{' '}
               Detailed comments are in Frame.io.
+            </Callout>
+          )}
+          {pkg.status === 'apply_feedback' && latest?.outcome === 'client_feedback' && (
+            <Callout tone="warning" title={`The client asked for changes on Round ${latest.round}`}>
+              {latest.feedbackNote ? `“${latest.feedbackNote}”` : 'No note added.'}{' '}
+              <span className="whitespace-nowrap">(Recorded by {lookup.personName(latest.clientDecidedById ?? '')})</span>
             </Callout>
           )}
 
@@ -190,7 +222,7 @@ export function PackageDetail() {
   )
 }
 
-function ActionPanel({ lookup, pkg, me }: { lookup: Lookup; pkg: WorkPackage; me: Person }) {
+function ActionPanel({ lookup, pkg, me, rounds, product }: { lookup: Lookup; pkg: WorkPackage; me: Person; rounds: Submission[]; product: Product | undefined }) {
   const toast = useToast()
   const [starting, setStarting] = useState(false)
   const latest = pkg.latest
@@ -220,16 +252,44 @@ function ActionPanel({ lookup, pkg, me }: { lookup: Lookup; pkg: WorkPackage; me
       )
     if (pkg.status === 'in_progress' || pkg.status === 'apply_feedback')
       return <SubmissionForm pkg={pkg} managerName={managerName} nextRound={nextRound} />
-    if (pkg.status === 'submitted')
+    // Waiting on a manager or the client; the final delivery link can still be added.
+    if (pkg.status === 'submitted' || pkg.status === 'client_review')
       return (
-        <StatusNote icon={Hourglass} title={`Round ${latest?.round} is awaiting review`}>
-          {managerName} was notified. You’ll get a notification when it’s approved or needs changes.
-        </StatusNote>
+        <div className="flex flex-col gap-4">
+          {pkg.status === 'submitted' ? (
+            <StatusNote icon={Hourglass} title={`Round ${latest?.round} is awaiting review`}>
+              {managerName} was notified. You’ll get a notification when it’s approved or needs changes.
+            </StatusNote>
+          ) : (
+            <StatusNote icon={Send} title={`Round ${latest?.round} is with the client`}>
+              It was approved and sent to the client. You’ll get a notification when they approve it or ask for changes.
+            </StatusNote>
+          )}
+          {!latest?.deliveryLink && <AddDeliveryLinkForm pkg={pkg} managerName={managerName} />}
+        </div>
       )
     if (pkg.status === 'completed')
       return (
         <StatusNote icon={CircleCheck} title="Approved and completed">
           {pkg.completedAt && `Completed ${formatDateTime(pkg.completedAt)}.`} It stays in your History.
+        </StatusNote>
+      )
+    if (pkg.status === 'on_hold')
+      return (
+        <StatusNote icon={Pause} title="On hold">
+          {managerName} paused this package. You’ll be notified when it resumes.
+        </StatusNote>
+      )
+    if (pkg.status === 'cancelled')
+      return (
+        <StatusNote icon={X} title="Cancelled">
+          No more work is needed on this package. It stays in your History.
+        </StatusNote>
+      )
+    if (pkg.status === 'archived')
+      return (
+        <StatusNote icon={Archive} title="Archived">
+          It stays in your History.
         </StatusNote>
       )
     return <StatusNote icon={Hourglass} title="No actions available" />
@@ -250,15 +310,59 @@ function ActionPanel({ lookup, pkg, me }: { lookup: Lookup; pkg: WorkPackage; me
       </StatusNote>
     )
 
-  // Manager
-  if (pkg.status === 'submitted') return <ReviewActions lookup={lookup} pkg={pkg} />
-  const notes: Partial<Record<WorkPackage['status'], string>> = {
-    assigned: `Waiting for ${lookup.personName(pkg.editorId)} to start work.`,
-    in_progress: `${lookup.personName(pkg.editorId)} is working on it. Review actions appear once it’s submitted.`,
-    apply_feedback: `Waiting for ${lookup.personName(pkg.editorId)} to resubmit after feedback.`,
-    completed: pkg.completedAt ? `Approved ${formatDateTime(pkg.completedAt)}. Reopening is planned for a later milestone.` : 'Approved.',
+  // Manager: review when submitted, then whatever the status allows (hold, cancel, reopen, …).
+  const editorName = lookup.personName(pkg.editorId)
+  const back = pkg.previousStatus ? STATUS_META[pkg.previousStatus].label : 'its previous status'
+  const notes: Record<Exclude<WorkPackage['status'], 'submitted' | 'client_review'>, { icon: LucideIcon; title: string; text: string }> = {
+    assigned: { icon: Hourglass, title: 'No review needed right now', text: `Waiting for ${editorName} to start work.` },
+    in_progress: { icon: Hourglass, title: 'No review needed right now', text: `${editorName} is working on it. Review actions appear once it’s submitted.` },
+    apply_feedback: { icon: Hourglass, title: 'No review needed right now', text: `Waiting for ${editorName} to resubmit.` },
+    on_hold: { icon: Pause, title: 'On hold', text: `${editorName} can’t submit until you resume it. Resuming returns it to ${back}.` },
+    completed: {
+      icon: CircleCheck,
+      title: 'Approved and completed',
+      text: `${pkg.completedAt ? `Approved ${formatDateTime(pkg.completedAt)}. ` : ''}Reopen it to send it back to ${editorName} for changes.`,
+    },
+    cancelled: { icon: X, title: 'Cancelled', text: 'Nothing more happens on it. Archive it when it no longer needs to show in finished lists.' },
+    archived: { icon: Archive, title: 'Archived', text: `It can’t be edited while archived. Unarchiving returns it to ${back}.` },
   }
-  return <StatusNote icon={pkg.status === 'completed' ? CircleCheck : Hourglass} title="No review needed right now">{notes[pkg.status]}</StatusNote>
+  return (
+    <div className="flex flex-col gap-4">
+      {pkg.status === 'submitted' ? (
+        <ReviewActions lookup={lookup} pkg={pkg} />
+      ) : pkg.status === 'client_review' ? (
+        <ClientDecisionActions lookup={lookup} pkg={pkg} rounds={rounds} product={product} />
+      ) : (
+        <StatusNote icon={notes[pkg.status].icon} title={notes[pkg.status].title}>
+          {notes[pkg.status].text}
+        </StatusNote>
+      )}
+      <div className="flex flex-col gap-2 border-t border-border pt-4">
+        <h3 className="text-xs font-semibold tracking-wide text-muted-fg uppercase">Manage package</h3>
+        <PackageLifecycleActions lookup={lookup} pkg={pkg} />
+      </div>
+    </div>
+  )
+}
+
+/** Why a package is on hold, cancelled, or reopened: the latest matching entry in its history. */
+const LIFECYCLE_CALLOUTS: Partial<Record<WorkPackage['status'], { type: ActivityType; title: string; tone: 'info' | 'warning' }>> = {
+  on_hold: { type: 'held', title: 'On hold', tone: 'warning' },
+  cancelled: { type: 'cancelled', title: 'Cancelled', tone: 'info' },
+  apply_feedback: { type: 'reopened', title: 'Reopened for changes', tone: 'warning' },
+}
+
+function LifecycleCallout({ pkg, activity, lookup }: { pkg: WorkPackage; activity: ActivityEvent[]; lookup: Lookup }) {
+  const spec = LIFECYCLE_CALLOUTS[pkg.status]
+  // Apply Feedback after a reopen only: the latest round is the approved one.
+  if (!spec || (pkg.status === 'apply_feedback' && pkg.latest?.outcome !== 'approved')) return null
+  const event = activity.find((e) => e.type === spec.type)
+  if (!event) return null
+  return (
+    <Callout tone={spec.tone} title={spec.title}>
+      {event.message} <span className="whitespace-nowrap">({lookup.personName(event.actorId)}, {formatDateTime(event.at)})</span>
+    </Callout>
+  )
 }
 
 function StatusNote({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children?: ReactNode }) {
@@ -276,19 +380,21 @@ function StatusNote({ icon: Icon, title, children }: { icon: LucideIcon; title: 
 function ReviewActions({ lookup, pkg }: { lookup: Lookup; pkg: WorkPackage }) {
   const toast = useToast()
   const latest = pkg.latest
-  const blocker = approvalBlocker(latest)
-  const [confirmApprove, setConfirmApprove] = useState(false)
+  const editorName = lookup.personName(pkg.editorId)
+  const [approveOpen, setApproveOpen] = useState(false)
+  const [approveMode, setApproveMode] = useState<ApproveMode>('client')
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [note, setNote] = useState('')
   const [noteError, setNoteError] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
 
+  const copy = APPROVE_COPY[approveMode]
   const approve = async () => {
-    setConfirmApprove(false)
     setBusy(true)
-    const r = await api.approve(pkg.id)
+    const r = approveMode === 'client' ? await api.sendToClient(pkg.id) : await api.approve(pkg.id)
     setBusy(false)
-    toast.show(r.ok ? `Approved. ${lookup.personName(pkg.editorId)} has been notified.` : r.error, r.ok ? 'success' : 'error')
+    setApproveOpen(false)
+    toast.show(r.ok ? copy.done(editorName) : r.error, r.ok ? 'success' : 'error')
   }
   const sendFeedback = async () => {
     setBusy(true)
@@ -310,34 +416,34 @@ function ReviewActions({ lookup, pkg }: { lookup: Lookup; pkg: WorkPackage }) {
         {latest && <span className="block text-xs text-muted-fg tabular-nums">{formatDateTime(latest.submittedAt)}</span>}
       </p>
       <p className="text-xs text-muted-fg">Check the links in Submission history. Detailed comments go in Frame.io.</p>
-      <button
-        type="button"
-        className={buttonClasses('primary', 'md', 'w-full')}
-        disabled={Boolean(blocker) || busy}
-        aria-describedby={blocker ? 'approve-blocker' : undefined}
-        onClick={() => setConfirmApprove(true)}
-      >
+      <button type="button" aria-haspopup="dialog" className={buttonClasses('primary', 'md', 'w-full')} disabled={busy} onClick={() => setApproveOpen(true)}>
         <Check aria-hidden className="size-4" />
-        Approve
+        Approve…
       </button>
-      {blocker && (
-        <p id="approve-blocker" className="text-xs font-medium text-warning">
-          {blocker}
-        </p>
-      )}
       <button type="button" className={buttonClasses('secondary', 'md', 'w-full')} onClick={() => setFeedbackOpen(true)}>
         <RotateCcw aria-hidden className="size-4" />
         Apply Feedback
       </button>
 
-      <ConfirmDialog
-        open={confirmApprove}
-        title="Approve this package?"
-        description={`Round ${latest?.round} will be approved and ${pkg.title} marked Completed. ${lookup.personName(pkg.editorId)} will be notified.`}
-        confirmLabel="Approve and complete"
-        onConfirm={approve}
-        onCancel={() => setConfirmApprove(false)}
-      />
+      <Dialog
+        open={approveOpen}
+        onClose={() => setApproveOpen(false)}
+        title={`Approve Round ${latest?.round ?? 1}`}
+        description={`${pkg.title} · ${editorName} will be notified.`}
+        footer={
+          <>
+            <button type="button" className={buttonClasses('secondary')} onClick={() => setApproveOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" disabled={busy} className={buttonClasses('primary')} onClick={() => void approve()}>
+              <Check aria-hidden className="size-4" />
+              {busy ? copy.busy : copy.confirm}
+            </button>
+          </>
+        }
+      >
+        <ApproveOptions latest={latest} value={approveMode} onChange={setApproveMode} />
+      </Dialog>
       <Dialog
         open={feedbackOpen}
         onClose={() => {

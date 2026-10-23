@@ -1,4 +1,23 @@
-import { BellOff, CalendarClock, Check, PackagePlus, RotateCcw, Upload, UserRound, Users, type LucideIcon } from 'lucide-react'
+import {
+  BellOff,
+  CalendarClock,
+  Check,
+  CircleCheck,
+  MessageSquareReply,
+  PackagePlus,
+  Pause,
+  Play,
+  RotateCcw,
+  Send,
+  Trash2,
+  Truck,
+  Undo2,
+  Upload,
+  UserRound,
+  Users,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { api } from '../../data/api'
 import type { AppNotification, NotificationType } from '../../data/types'
@@ -15,6 +34,15 @@ const ICONS: Record<NotificationType, LucideIcon> = {
   approved: Check,
   deadline_changed: CalendarClock,
   manager_changed: UserRound,
+  on_hold: Pause,
+  resumed: Play,
+  cancelled: X,
+  reopened: Undo2,
+  deleted: Trash2,
+  sent_to_client: Send,
+  client_approved: CircleCheck,
+  client_feedback: MessageSquareReply,
+  delivery_added: Truck,
 }
 
 export function NotificationList({ items, personId, emptyText }: { items: AppNotification[]; personId: string; emptyText: string }) {
@@ -27,10 +55,10 @@ export function NotificationList({ items, personId, emptyText }: { items: AppNot
       </EmptyState>
     )
 
-  const open = (n: AppNotification) => {
+  const open = (n: AppNotification, packageId: string) => {
     // Opening counts as reading; don't wait for the server before navigating.
     if (!n.readAt) void api.markNotificationRead(personId, n.id)
-    navigate(`/packages/${n.packageId}`)
+    navigate(`/packages/${packageId}`)
   }
   const markRead = async (n: AppNotification) => {
     const result = await api.markNotificationRead(personId, n.id)
@@ -42,6 +70,7 @@ export function NotificationList({ items, personId, emptyText }: { items: AppNot
       {items.map((n) => {
         const Icon = ICONS[n.type]
         const unread = !n.readAt
+        const packageId = n.packageId
         return (
           <li key={n.id} className={cx('flex items-start gap-3 px-4 py-3', unread && 'bg-primary/5')}>
             <span
@@ -53,13 +82,18 @@ export function NotificationList({ items, personId, emptyText }: { items: AppNot
               <Icon aria-hidden className="size-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <button
-                type="button"
-                onClick={() => open(n)}
-                className={cx('text-left text-sm underline-offset-2 hover:text-primary hover:underline', unread ? 'font-semibold' : 'text-fg')}
-              >
-                {n.message}
-              </button>
+              {packageId ? (
+                <button
+                  type="button"
+                  onClick={() => open(n, packageId)}
+                  className={cx('text-left text-sm underline-offset-2 hover:text-primary hover:underline', unread ? 'font-semibold' : 'text-fg')}
+                >
+                  {n.message}
+                </button>
+              ) : (
+                // The package was deleted: nothing to open.
+                <p className={cx('text-sm', unread ? 'font-semibold' : 'text-fg')}>{n.message}</p>
+              )}
               <p className="flex items-center gap-2 text-xs text-muted-fg tabular-nums">
                 {unread && <span className="font-semibold text-primary">Unread</span>}
                 {formatDateTime(n.createdAt)}

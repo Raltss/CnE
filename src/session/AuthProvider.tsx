@@ -11,7 +11,7 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Person } from '../data/types'
-import { AuthLayout, StatusScreen } from '../pages/auth/AuthLayout'
+import { AuthLayout, LoadingScreen, StatusScreen } from '../pages/auth/AuthLayout'
 import { Login } from '../pages/auth/Login'
 import { SetPassword } from '../pages/auth/SetPassword'
 import { buttonClasses } from '../lib/styles'
@@ -36,18 +36,19 @@ export function AuthProvider({
   const [auth, setAuth] = useState<AuthState>({ phase: 'restoring' })
   const signedIn = auth.phase === 'signed_in'
   const userId = signedIn ? auth.userId : null
-  const lastUserId = useRef<string | null>(null)
+  const previousUserId = useRef<string | null>(null)
 
   useEffect(() => {
     if (signedIn) onSignedIn?.()
   }, [signedIn, onSignedIn])
 
   useEffect(() => {
-    if (!userId) return
-    // Someone else signed in on this browser: start them on their own home page, not on
-    // the page (and filters) the previous person left open. A reload keeps the URL.
-    if (lastUserId.current && lastUserId.current !== userId) window.history.replaceState(null, '', '/')
-    lastUserId.current = userId
+    // Signing out, or someone else signing in, goes back to "/": the next person starts on
+    // their own home page, not the page (and filters) the previous person left open, even
+    // after a reload in between. A reload while signed in, or a link opened while signed
+    // out, keeps its URL.
+    if (previousUserId.current && previousUserId.current !== userId) window.history.replaceState(null, '', '/')
+    previousUserId.current = userId
   }, [userId])
 
   useEffect(() => {
@@ -73,7 +74,7 @@ export function AuthProvider({
     await supabase.auth.signOut()
   }, [supabase])
 
-  if (auth.phase === 'restoring') return <StatusScreen title="Signing you in" message="Restoring your session…" />
+  if (auth.phase === 'restoring') return <LoadingScreen />
   if (auth.phase === 'signed_out') return <Login signIn={signIn} />
   return (
     <StaffGate key={auth.userId} supabase={supabase} userId={auth.userId} email={auth.email} signOut={signOut}>
@@ -140,6 +141,8 @@ function StaffGate({
       const { data, error } = await supabase.from('profiles').select('role, is_active').eq('id', userId).maybeSingle()
       if (error) return // e.g. offline; nothing changed that we know of
       if (data?.role !== role || !data.is_active) {
+        // The current page may not exist for the new role: start again from their home page.
+        window.history.replaceState(null, '', '/')
         setProfile({ phase: 'loading' })
         setAttempt((n) => n + 1)
       }
@@ -175,7 +178,7 @@ function StaffGate({
   const me = profile.phase === 'ready' ? profile.me : null
   const session = useMemo(() => (me ? { me, email, signOut, changePassword } : null), [me, email, signOut, changePassword])
 
-  if (profile.phase === 'loading') return <StatusScreen title="Signing you in" message="Checking your account…" />
+  if (profile.phase === 'loading') return <LoadingScreen />
   if (profile.phase === 'error')
     return (
       <StatusScreen

@@ -159,6 +159,12 @@ Pages other than the three home pages (Dashboard, My Work, Overview) are separat
 | | [`src/components/domain/SubmissionForm.tsx`](../src/components/domain/SubmissionForm.tsx) | The editor's review/delivery link form. |
 | | [`src/components/domain/SubmissionHistory.tsx`](../src/components/domain/SubmissionHistory.tsx) | Lists every submission round, newest first. |
 | | [`src/components/domain/ActivityTimeline.tsx`](../src/components/domain/ActivityTimeline.tsx) | Lists the package's activity log. |
+| | [`src/components/domain/PackageLifecycleActions.tsx`](../src/components/domain/PackageLifecycleActions.tsx) | The manager's **Manage package** buttons: Hold, Resume, Cancel, Archive, Unarchive, Reopen, and Delete (only while nobody has started it), each with a confirm dialog and, for hold, cancel, and reopen, an optional note. Which buttons show for which status is the `AVAILABLE` table; the database functions enforce the same rules. |
+| | [`src/components/domain/ProductsDialog.tsx`](../src/components/domain/ProductsDialog.tsx) | Packages → **Products**: add a product, or edit its name and the client revisions it includes. |
+| | [`src/components/domain/ApproveOptions.tsx`](../src/components/domain/ApproveOptions.tsx) | The approve dialog's choice (package page and dashboard quick review): **Send to the client** or **Approve and complete** (needs a delivery link). |
+| | [`src/components/domain/ClientReviewActions.tsx`](../src/components/domain/ClientReviewActions.tsx) | While a package is **With Client**: the manager records **Client approved** or **Client wants changes** (with the revision count against the product's allowance); the editor can add a missing delivery link. |
+| **Calendar and Reports** | [`src/pages/Calendar.tsx`](../src/pages/Calendar.tsx) | One week of deadlines per editor (`?week=` Monday, `?scope=mine`), busy days and overdue work flagged; a day-by-day list on phones. Reads current work only. |
+| | [`src/pages/Reports.tsx`](../src/pages/Reports.tsx), [`src/data/reports.ts`](../src/data/reports.ts) | Delivery and revision numbers for a period, by editor and product. `usePackageReport` loads every package first delivered in the period (with its rounds), and `reports.ts` computes the numbers, so totals cover the whole period. |
 | | [`src/components/domain/LinkField.tsx`](../src/components/domain/LinkField.tsx) | A labeled external link with open and copy buttons. |
 | **Manager dashboard** | [`src/pages/manager/Dashboard.tsx`](../src/pages/manager/Dashboard.tsx) | 4 clickable tiles, "Needs your review", and "Team workload"; tiles and editor rows open dialogs with details. |
 | | [`src/components/domain/ReviewDialog.tsx`](../src/components/domain/ReviewDialog.tsx) | Quick-review dialog: shows the latest round's links and lets a manager approve or mark Apply Feedback without leaving the dashboard. |
@@ -186,6 +192,7 @@ Pages other than the three home pages (Dashboard, My Work, Overview) are separat
 | | [`src/components/ui/`](../src/components/ui/) | Generic building blocks: `Dialog`, `ConfirmDialog`, `Field`, `ToastProvider`, `EmptyState`, `Callout`, `Section`, `TabNav` (tabs as links), `FilterSelect`, `PageStatus`. |
 | | [`src/lib/time.ts`](../src/lib/time.ts) | Formats every date and time in Asia/Manila (PHT). |
 | | [`src/lib/status.ts`](../src/lib/status.ts) | Label, icon, and color for each status. |
+| | [`src/lib/back.ts`](../src/lib/back.ts) | "Back" that returns to the page that opened this one: the Packages list passes `backState(...)` on its links, and the package page and package form read it with `useBack(fallback)`, so Back, Cancel, Save, and Delete return to the list with its filters. |
 | | [`src/lib/styles.ts`](../src/lib/styles.ts) | Shared Tailwind class recipes for buttons, inputs, and cards. |
 
 ---
@@ -298,10 +305,8 @@ For speed tests there's `supabase/sql-tests/volume-fixture.sql`: a year of made-
 | Password reset by email ("forgot password") | ❌ Ask the admin, who resets it in the Dashboard. (Adding people works in the app with a temporary password; there are no invite emails.) |
 | Google sign-in | ❌ Deferred; a future addition |
 | Editing names/titles in the app | ⚠️ Set at Add user; change them later via `private.approve_staff` in the SQL editor |
-| On Hold, Resume, Cancel, Archive, Unarchive | ⏸ Deferred after v1. The statuses exist in the types and the database enum, but nothing moves a package to them |
-| Reopen a Completed package | ❌ Completed packages can't be edited |
 | Attendance correction requests, approvals, direct corrections, audit history | ⏸ Deferred after v1. The Attendance page tells people to ask their manager |
-| Renaming/removing products, Editors management screen | ❌ Products can only be added (Packages → Add product). Clients were removed on purpose (2026-10-21) |
+| Removing products, Editors management screen | ❌ Products can be added and renamed (Packages → Products), not removed. Clients were removed on purpose (2026-10-21) |
 | Scheduled 16-hour auto-close | ⚠️ Runs on every clock action and every minute while someone has the app open; `pg_cron` is still a proposal |
 | Global search box and user menu in the top bar | ❌ Search exists only on the Packages page filters |
 | Email notifications, deadline reminders | ❌ Out of scope for v1 / proposal |
@@ -378,6 +383,22 @@ Use a normal window for one person and a private window (or another browser) for
 21. Click **Clock in**. The button and the top-bar pill both switch to clocked in, with a timer. **Refresh the page**: you're still clocked in.
 22. Click **Clock out** → confirm. The session appears under "My sessions".
 23. Overnight sessions and the 16-hour auto-close need real time to pass; the SQL checks in `supabase/sql-tests/` cover both.
+
+### G. Package lifecycle (managers)
+
+24. Create a package and, without starting it, open it. Under **Manage package** you see **Put on hold**, **Cancel package**, and **Delete package**. Delete it: you land on Packages, and the editor gets a "was deleted" notice with no link.
+25. Create another and let the editor start it. **Put on hold** with a reason: the status is **On Hold**, the reason shows above the brief, and the editor's **My Work** lists it under **On hold** (they can't submit). **Resume** returns it to exactly the status it had.
+26. Open a **Completed** package. **Reopen for changes** (optional note) moves it to **Apply Feedback**; the editor resubmits as a new round and the approved round stays in the history. **Edit** on a completed package changes details only; the editor and deadline are locked.
+27. **Cancel package** (optional reason), then **Archive**. Archived packages have no Edit button; **Unarchive** returns them to Cancelled (or Completed).
+28. On **Packages**, click **Products** to add a product or rename one.
+
+### H. Client review, Calendar, Reports (managers)
+
+29. In **Packages → Products**, edit a product and set **Revisions** to `1`.
+30. Have an editor submit a package of that product with only a review link. As the manager, click **Approve…**: **Send to the client** is selected, and **Approve and complete** explains it needs a delivery link. Send it. The status is **With Client**; **Client approved** waits for a delivery link.
+31. Click **Client wants changes**, type a note: the dialog says "client revision 1 of the 1 included". The package goes back as **Apply Feedback**, and the header shows **Client revisions 1 of 1 included**.
+32. As the editor, resubmit, and after the manager sends it to the client again, use **Add delivery link** on the package page. As the manager, click **Client approved**: the package is **Completed**.
+33. Open **Calendar**: each editor's deadlines this week, with **Busy day** when an editor has 3 or more due on one day and an **Overdue** column for older work. **Reports** shows the period's deliveries, on-time and first-pass rates, and revisions, including packages over their allowance.
 
 ### G. See the role checks
 

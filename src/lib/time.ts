@@ -82,3 +82,32 @@ export function formatDistance(ms: number): string {
 
 export const HOUR_MS = 60 * 60 * 1000
 export const DAY_MS = 24 * HOUR_MS
+
+// ── Manila calendar days (YYYY-MM-DD keys) ──────────────────────────────────
+
+const KEY = /^\d{4}-\d{2}-\d{2}$/
+export const isDateKey = (value: string | null): value is string => Boolean(value && KEY.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)))
+
+/** The key `days` days after (or before) another; plain calendar arithmetic. */
+export function addDays(key: string, days: number): string {
+  const date = new Date(`${key}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+/** 0 = Monday … 6 = Sunday. */
+export const weekdayIndex = (key: string) => (new Date(`${key}T00:00:00Z`).getUTCDay() + 6) % 7
+
+/** The Monday of the week that contains this Manila date. */
+export const mondayOf = (key: string) => addDays(key, -weekdayIndex(key))
+
+/** The instant a Manila calendar day starts (00:00 PHT), as ISO. */
+export const manilaDayStart = (key: string) => new Date(`${key}T00:00:00+08:00`).toISOString()
+
+const dayHeaderFmt = new Intl.DateTimeFormat('en-PH', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' })
+const dayRangeFmt = new Intl.DateTimeFormat('en-PH', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
+/** "Mon, Oct 20" for a date key (the key is already a Manila date). */
+export const formatDayKey = (key: string) => dayHeaderFmt.format(new Date(`${key}T00:00:00Z`))
+/** "Oct 20 – Oct 26, 2026" for two date keys, both inclusive. */
+export const formatDayRange = (first: string, last: string) =>
+  dayRangeFmt.formatRange(new Date(`${first}T00:00:00Z`), new Date(`${last}T00:00:00Z`))

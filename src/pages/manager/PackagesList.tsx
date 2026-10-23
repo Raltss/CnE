@@ -1,7 +1,7 @@
-import { FilterX, PackagePlus, Plus } from 'lucide-react'
+import { FilterX, Plus, Tags } from 'lucide-react'
 import { useId, useState } from 'react'
-import { Link, useSearchParams } from 'react-router'
-import { AddProductDialog } from '../../components/domain/AddProductDialog'
+import { Link, useLocation, useSearchParams } from 'react-router'
+import { ProductsDialog } from '../../components/domain/ProductsDialog'
 import { PackageSections } from '../../components/domain/PackageSections'
 import { ViewOnlyBanner } from '../../components/domain/ViewOnlyBanner'
 import { PageStatus } from '../../components/ui/PageStatus'
@@ -19,6 +19,7 @@ import {
   type PackageFilters,
 } from '../../data/selectors'
 import type { PackageStatus } from '../../data/types'
+import { backState } from '../../lib/back'
 import { STATUS_META, WORKFLOW_STATUSES } from '../../lib/status'
 import { buttonClasses, inputClasses } from '../../lib/styles'
 import { useSession } from '../../session/context'
@@ -36,8 +37,11 @@ export function PackagesList() {
   const { me } = useSession()
   // Admins see the same list read-only: no create or edit actions.
   const canManage = me.role === 'manager'
-  const [addingProduct, setAddingProduct] = useState<number | null>(null)
+  // A new key per opening, so the Products dialog's fields start empty.
+  const [managingProducts, setManagingProducts] = useState<number | null>(null)
   const [params, setParams] = useSearchParams()
+  // Pages opened from here (a package, Edit, New package) come back to this list, filters included.
+  const fromHere = backState(useLocation(), 'Packages')
   const filters = readFilters(params)
   // The search box queries the server for finished work; wait until typing pauses.
   const search = useDebouncedValue(filters.q)
@@ -81,11 +85,11 @@ export function PackagesList() {
         actions={
           canManage && (
             <>
-              <button type="button" aria-haspopup="dialog" className={buttonClasses('secondary')} onClick={() => setAddingProduct(Date.now())}>
-                <PackagePlus aria-hidden className="size-4" />
-                Add product
+              <button type="button" aria-haspopup="dialog" className={buttonClasses('secondary')} onClick={() => setManagingProducts(Date.now())}>
+                <Tags aria-hidden className="size-4" />
+                Products
               </button>
-              <Link to="/packages/new" className={buttonClasses('primary')}>
+              <Link to="/packages/new" state={fromHere} className={buttonClasses('primary')}>
                 <Plus aria-hidden className="size-4" />
                 New package
               </Link>
@@ -156,19 +160,22 @@ export function PackagesList() {
                 }
               : null
           }
+          linkState={fromHere}
           caption="Packages"
           columns={['package', 'product', 'editor', 'manager', 'status', 'deadline']}
           emptyHint="Try a different product, editor, or status."
           action={(pkg) =>
-            canManage && (
-              <Link to={`/packages/${pkg.id}/edit`} className={buttonClasses('secondary', 'sm')} aria-label={`Edit ${pkg.title}`}>
+            // Archived packages are unarchived from their page before editing.
+            canManage &&
+            pkg.status !== 'archived' && (
+              <Link to={`/packages/${pkg.id}/edit`} state={fromHere} className={buttonClasses('secondary', 'sm')} aria-label={`Edit ${pkg.title}`}>
                 Edit
               </Link>
             )
           }
         />
       )}
-      {addingProduct !== null && <AddProductDialog key={addingProduct} open onClose={() => setAddingProduct(null)} />}
+      {managingProducts !== null && <ProductsDialog key={managingProducts} open onClose={() => setManagingProducts(null)} />}
     </>
   )
 }

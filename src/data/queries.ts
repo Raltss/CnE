@@ -18,6 +18,7 @@ import type {
   PackageSummary,
   Person,
   Product,
+  ReportPackage,
   RoundSummary,
   RoundWithPackage,
   StaffAccount,
@@ -50,6 +51,7 @@ export const keys = {
   notifications: (personId: string, unreadOnly: boolean) => ['notifications', 'list', personId, unreadOnly] as const,
   unreadCount: (personId: string) => ['notifications', 'unread', personId] as const,
   staffActivity: ['staff-activity'] as const,
+  report: (from: string, to: string) => ['report', from, to] as const,
 }
 
 // ── Plumbing ────────────────────────────────────────────────────────────────
@@ -93,8 +95,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const PERSON_COLUMNS = 'id, full_name, title, role, is_active'
 const ACCOUNT_COLUMNS = 'id, email, full_name, title, role, is_active, created_at, must_change_password'
 const PACKAGE_COLUMNS = 'id, code, title, product_id, editor_id, responsible_manager_id, deadline, status, created_by, updated_at, completed_at'
-const DETAIL_COLUMNS = `${PACKAGE_COLUMNS}, description, brief_link, reference_links, deliverables, created_at`
-const ROUND_COLUMNS = 'id, package_id, round, review_link, delivery_link, submitted_at, submitted_by, outcome, decided_at, decided_by, feedback_note'
+const DETAIL_COLUMNS = `${PACKAGE_COLUMNS}, description, brief_link, reference_links, deliverables, created_at, previous_status, first_delivered_at`
+const ROUND_COLUMNS =
+  'id, package_id, round, review_link, delivery_link, submitted_at, submitted_by, outcome, decided_at, decided_by, feedback_note, sent_to_client_at, client_decided_at, client_decided_by'
 const LATEST_ROUND = 'latest:submissions(round, submitted_at, review_link, delivery_link, outcome, decided_by, feedback_note)'
 const SESSION_COLUMNS = 'id, person_id, clock_in, clock_out, auto_closed'
 
@@ -135,6 +138,8 @@ interface PackageRow {
   reference_links?: string[]
   deliverables?: string
   created_at?: string
+  previous_status?: PackageSummary['status'] | null
+  first_delivered_at?: string | null
 }
 interface SubmissionRow {
   id: string
@@ -148,6 +153,9 @@ interface SubmissionRow {
   decided_at: string | null
   decided_by: string | null
   feedback_note: string | null
+  sent_to_client_at: string | null
+  client_decided_at: string | null
+  client_decided_by: string | null
 }
 interface SessionRow {
   id: string
@@ -210,6 +218,9 @@ const toSubmission = (s: SubmissionRow): Submission => ({
   decidedAt: isoOrNull(s.decided_at),
   decidedById: s.decided_by,
   feedbackNote: s.feedback_note,
+  sentToClientAt: isoOrNull(s.sent_to_client_at),
+  clientDecidedAt: isoOrNull(s.client_decided_at),
+  clientDecidedById: s.client_decided_by,
 })
 
 const toSession = (s: SessionRow): AttendanceSession => ({
@@ -250,7 +261,11 @@ const productsQuery = queryOptions({
   queryKey: keys.products,
   staleTime: 5 * 60_000,
   queryFn: async ({ signal }): Promise<Product[]> =>
-    fetchAll<Product>((from, to) => client().from('products').select('id, name').order('name').order('id').range(from, to).abortSignal(signal)),
+    (
+      await fetchAll<{ id: string; name: string; included_revisions: number | null }>((from, to) =>
+        client().from('products').select('id, name, included_revisions').order('name').order('id').range(from, to).abortSignal(signal),
+      )
+    ).map((p) => ({ id: p.id, name: p.name, includedRevisions: p.included_revisions })),
 })
 
 export const usePeople = () => useQuery(peopleQuery)
@@ -343,6 +358,8 @@ export function usePackage(id: string | undefined) {
         referenceLinks: row.reference_links ?? [],
         deliverables: row.deliverables ?? '',
         createdAt: iso(row.created_at!),
+        previousStatus: row.previous_status ?? null,
+        firstDeliveredAt: isoOrNull(row.first_delivered_at ?? null),
       }
       return {
         pkg,
@@ -478,6 +495,68 @@ export function useRecentCompletions() {
   })
 }
 
+// ── Reports ─────────────────────────────────────────────────────────────────
+
+/**
+ * Every package first delivered (sent to the client, or approved without client review)
+ * in [from, to), with its rounds' outcomes and timings. Loaded completely, so every
+ * total and breakdown on the Reports page covers the whole period.
+ */
+export function usePackageReport(range: { from: string; to: string }) {
+  return useQuery({
+    queryKey: keys.report(range.from, range.to),
+    placeholderData: keepPreviousData,
+    queryFn: async ({ signal }): Promise<ReportPackage[]> =>
+      (
+        await fetchAll<{
+          id: string
+          code: string
+          title: string
+          product_id: string
+          editor_id: string
+          responsible_manager_id: string
+          status: ReportPackage['status']
+          deadline: string
+          created_at: string
+          first_delivered_at: string
+          rounds: Array<{ round: number; submitted_at: string; outcome: SubmissionOutcome; sent_to_client_at: string | null; client_decided_at: string | null }>
+        }>((from, to) =>
+          client()
+            .from('packages')
+            .select(
+              'id, code, title, product_id, editor_id, responsible_manager_id, status, deadline, created_at, first_delivered_at, rounds:submissions(round, submitted_at, outcome, sent_to_client_at, client_decided_at)',
+            )
+            .gte('first_delivered_at', range.from)
+            .lt('first_delivered_at', range.to)
+            .order('first_delivered_at')
+            .order('id')
+            .range(from, to)
+            .abortSignal(signal),
+        )
+      ).map((p) => ({
+        id: p.id,
+        code: p.code,
+        title: p.title,
+        productId: p.product_id,
+        editorId: p.editor_id,
+        responsibleManagerId: p.responsible_manager_id,
+        status: p.status,
+        deadline: iso(p.deadline),
+        createdAt: iso(p.created_at),
+        firstDeliveredAt: iso(p.first_delivered_at),
+        rounds: p.rounds
+          .map((r) => ({
+            round: r.round,
+            submittedAt: iso(r.submitted_at),
+            outcome: r.outcome,
+            sentToClientAt: isoOrNull(r.sent_to_client_at),
+            clientDecidedAt: isoOrNull(r.client_decided_at),
+          }))
+          .sort((a, b) => a.round - b.round),
+      })),
+  })
+}
+
 // ── Attendance ──────────────────────────────────────────────────────────────
 
 function sessionsQuery(personId: string | null, days: number, signal: AbortSignal) {
@@ -542,7 +621,7 @@ export function useNotifications(personId: string, unreadOnly: boolean) {
           id: n.id!,
           recipientId: n.recipient_id!,
           type: n.type as AppNotification['type'],
-          packageId: n.package_id!,
+          packageId: n.package_id,
           actorId: n.actor_id!,
           message: n.message!,
           createdAt: iso(n.created_at!),

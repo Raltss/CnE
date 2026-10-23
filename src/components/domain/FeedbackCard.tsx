@@ -27,7 +27,14 @@ export function FeedbackCard({ lookup, pkg, now }: { lookup: Lookup; pkg: Packag
       <p className="flex gap-2 text-sm">
         <RotateCcw aria-hidden className="mt-0.5 size-4 shrink-0 text-st-feedback" />
         <span>
-          {sub?.feedbackNote ? (
+          {sub?.outcome === 'approved' ? (
+            // A manager reopened it after approval; the note is in the package's history.
+            'Reopened for changes after approval. Open it to see the note.'
+          ) : sub?.outcome === 'client_feedback' ? (
+            <>
+              <span className="font-semibold">Client:</span> {sub.feedbackNote ? `“${sub.feedbackNote}”` : 'Changes requested. See the comments in Frame.io.'}
+            </>
+          ) : sub?.feedbackNote ? (
             <>
               <span className="font-semibold">{lookup.personName(sub.decidedById ?? '')}:</span> “{sub.feedbackNote}”
             </>

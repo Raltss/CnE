@@ -18,6 +18,8 @@ interface PackageSectionsProps {
   columns: PackageColumn[]
   caption: string
   action?: (pkg: PackageSummary) => ReactNode
+  /** Router state for the package links, e.g. so the package page's Back returns here. */
+  linkState?: unknown
   /** Shown when nothing matches, e.g. "Try another product or status." */
   emptyHint: string
 }
@@ -26,7 +28,7 @@ interface PackageSectionsProps {
  * Packages in two parts: current work (complete, soonest deadline first) and
  * finished work (paged from the server, most recently finished first).
  */
-export function PackageSections({ lookup, now, active, finished, columns, caption, action, emptyHint }: PackageSectionsProps) {
+export function PackageSections({ lookup, now, active, finished, columns, caption, action, linkState, emptyHint }: PackageSectionsProps) {
   const done = useFinishedPackages(finished ?? {}, finished !== null)
   const finishedRows = pagedRows(done.data)
   const total = pagedTotal(done.data)
@@ -36,7 +38,15 @@ export function PackageSections({ lookup, now, active, finished, columns, captio
       {active && (
         <Section title={`Current work (${active.length})`} description="Soonest deadline first" flush>
           {active.length ? (
-            <PackageTable lookup={lookup} packages={active} now={now} caption={`${caption}: current work`} columns={columns} action={action} />
+            <PackageTable
+              lookup={lookup}
+              packages={active}
+              now={now}
+              caption={`${caption}: current work`}
+              columns={columns}
+              action={action}
+              linkState={linkState}
+            />
           ) : (
             <EmptyState icon={finished ? Play : FolderSearch} title="No current work matches" compact>
               {emptyHint}
@@ -50,7 +60,15 @@ export function PackageSections({ lookup, now, active, finished, columns, captio
             <PageStatus error={done.error?.message} retry={() => void done.refetch()} />
           ) : finishedRows.length ? (
             <>
-              <PackageTable lookup={lookup} packages={finishedRows} now={now} caption={`${caption}: finished`} columns={columns} />
+              <PackageTable
+                lookup={lookup}
+                packages={finishedRows}
+                now={now}
+                caption={`${caption}: finished`}
+                columns={columns}
+                action={action}
+                linkState={linkState}
+              />
               <LoadMore
                 shown={finishedRows.length}
                 total={total}
