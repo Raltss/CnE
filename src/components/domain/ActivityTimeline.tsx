@@ -1,14 +1,23 @@
 import {
+  Archive,
+  ArchiveRestore,
   CalendarClock,
   Check,
+  CircleCheck,
   History,
+  MessageSquareReply,
   PackagePlus,
+  Pause,
   Pencil,
   Play,
   RotateCcw,
+  Send,
+  Truck,
+  Undo2,
   Upload,
   UserRound,
   Users,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 import type { Lookup } from '../../data/selectors'
@@ -26,6 +35,16 @@ const ICONS: Record<ActivityType, LucideIcon> = {
   deadline_changed: CalendarClock,
   manager_changed: UserRound,
   edited: Pencil,
+  held: Pause,
+  resumed: Play,
+  cancelled: X,
+  archived: Archive,
+  unarchived: ArchiveRestore,
+  reopened: Undo2,
+  sent_to_client: Send,
+  client_approved: CircleCheck,
+  client_feedback: MessageSquareReply,
+  delivery_added: Truck,
 }
 
 /** `events` are newest first, as the package query returns them. */

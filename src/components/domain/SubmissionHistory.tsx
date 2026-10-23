@@ -14,6 +14,18 @@ function sameLinksAs(sub: Submission, all: Submission[]) {
   return earlier?.round ?? null
 }
 
+/** Who decided what and when: the internal review, then the client's decision if it went to them. */
+function decisions(sub: Submission, lookup: Lookup): string[] {
+  const by = (id: string | null) => lookup.personName(id ?? '')
+  if (!sub.decidedAt) return []
+  if (sub.outcome === 'feedback') return [`Feedback requested ${formatDateTime(sub.decidedAt)} by ${by(sub.decidedById)}`]
+  if (!sub.sentToClientAt) return [`Approved ${formatDateTime(sub.decidedAt)} by ${by(sub.decidedById)}`]
+  const sent = `Approved and sent to the client ${formatDateTime(sub.sentToClientAt)} by ${by(sub.decidedById)}`
+  if (!sub.clientDecidedAt) return [sent]
+  const verdict = sub.outcome === 'client_feedback' ? 'Client asked for changes' : 'Client approved'
+  return [sent, `${verdict} ${formatDateTime(sub.clientDecidedAt)} (recorded by ${by(sub.clientDecidedById)})`]
+}
+
 /** Every round is listed separately, newest first, even when links are reused. */
 /** `rounds` are newest first, as the package query returns them. */
 export function SubmissionHistory({ rounds: subs, lookup }: { rounds: Submission[]; lookup: Lookup }) {
@@ -47,15 +59,14 @@ export function SubmissionHistory({ rounds: subs, lookup }: { rounds: Submission
               <LinkField label="Review link" icon={Clapperboard} url={sub.reviewLink} />
               <LinkField label="Delivery link" icon={Truck} url={sub.deliveryLink} />
             </div>
-            {sub.decidedAt && (
-              <p className="mt-1 text-xs text-muted-fg tabular-nums">
-                {sub.outcome === 'approved' ? 'Approved' : 'Feedback requested'} {formatDateTime(sub.decidedAt)} by{' '}
-                {lookup.personName(sub.decidedById ?? '')}
+            {decisions(sub, lookup).map((line) => (
+              <p key={line} className="mt-1 text-xs text-muted-fg tabular-nums">
+                {line}
               </p>
-            )}
+            ))}
             {sub.feedbackNote && (
               <blockquote className="mt-2 border-l-2 border-st-feedback pl-3 text-sm">
-                <span className="sr-only">Manager note: </span>
+                <span className="sr-only">{sub.outcome === 'client_feedback' ? 'Client’s request: ' : 'Manager note: '}</span>
                 {sub.feedbackNote}
               </blockquote>
             )}

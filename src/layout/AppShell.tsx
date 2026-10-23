@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { ClockPill } from '../components/domain/ClockControls'
 import { Dialog } from '../components/ui/Dialog'
 import { PageStatus } from '../components/ui/PageStatus'
+import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { api } from '../data/api'
 import { useNow } from '../data/hooks'
 import { useAccounts, useActiveWork, useUnreadCount } from '../data/queries'
@@ -106,7 +107,7 @@ export function AppShell() {
             <span className="flex size-8 items-center justify-center rounded-md bg-primary text-on-primary">
               <Clapperboard aria-hidden className="size-4" />
             </span>
-            <span className="hidden text-lg lg:inline">CnE</span>
+            <span className="hidden font-display text-lg lg:inline">CnE</span>
             <span className="sr-only lg:hidden">CnE home</span>
           </Link>
           <ul className="flex flex-1 flex-col gap-1 p-2">
@@ -190,6 +191,7 @@ export function AppShell() {
             </div>
             <div className="flex items-center gap-2">
               {doesWork && <ClockPill />}
+              <ThemeToggle />
               {doesWork && (
                 <Link
                   to="/notifications"

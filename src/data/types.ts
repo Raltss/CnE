@@ -32,16 +32,19 @@ export interface StaffAccount {
 export interface Product {
   id: string
   name: string
+  /** Client revisions included (e.g. in the client's contract); null when no limit is set. */
+  includedRevisions: number | null
 }
 
 /**
- * Full PRD status set. This milestone implements transitions between the
- * five main statuses only; On Hold / Cancelled / Archived are typed for later.
+ * Full PRD status set (§5). Managers move packages between them with the
+ * workflow and lifecycle functions; see docs/product-requirements.md.
  */
 export type PackageStatus =
   | 'assigned'
   | 'in_progress'
   | 'submitted'
+  | 'client_review'
   | 'apply_feedback'
   | 'completed'
   | 'on_hold'
@@ -74,6 +77,10 @@ export interface WorkPackage extends PackageSummary {
   referenceLinks: string[]
   deliverables: string
   createdAt: string
+  /** First sent to the client, or approved without client review; null before that. */
+  firstDeliveredAt: string | null
+  /** Where Resume (On Hold) or Unarchive goes back to; null otherwise. */
+  previousStatus: PackageStatus | null
 }
 
 /** The parts of a round that lists and the review dialog need. */
@@ -87,7 +94,11 @@ export interface RoundSummary {
   feedbackNote: string | null
 }
 
-export type SubmissionOutcome = 'pending' | 'feedback' | 'approved'
+/**
+ * pending → feedback (internal changes) | approved (completed) | with_client;
+ * with_client → client_feedback (client changes) | approved (client approved).
+ */
+export type SubmissionOutcome = 'pending' | 'feedback' | 'with_client' | 'client_feedback' | 'approved'
 
 /** One record per submission round, even when links are reused. */
 export interface Submission {
@@ -101,8 +112,13 @@ export interface Submission {
   outcome: SubmissionOutcome
   decidedAt: string | null
   decidedById: string | null
-  /** Optional short note with Apply Feedback; details stay in Frame.io. */
+  /** Optional short note with Apply Feedback (the manager's, or the client's); details stay in Frame.io. */
   feedbackNote: string | null
+  /** When the manager approved it and sent it to the client. */
+  sentToClientAt: string | null
+  /** When the manager recorded the client's decision, and who did. */
+  clientDecidedAt: string | null
+  clientDecidedById: string | null
 }
 
 export type ActivityType =
@@ -115,10 +131,35 @@ export type ActivityType =
   | 'deadline_changed'
   | 'manager_changed'
   | 'edited'
+  | 'held'
+  | 'resumed'
+  | 'cancelled'
+  | 'archived'
+  | 'unarchived'
+  | 'reopened'
+  | 'sent_to_client'
+  | 'client_approved'
+  | 'client_feedback'
+  | 'delivery_added'
 
 /** A round listed across packages (a person's submissions or review decisions). */
 export interface RoundWithPackage extends Submission {
   package: { id: string; title: string; code: string } | null
+}
+
+/** A delivered package as the Reports page reads it: its rounds' outcomes and timings, oldest round first. */
+export interface ReportPackage {
+  id: string
+  code: string
+  title: string
+  productId: string
+  editorId: string
+  responsibleManagerId: string
+  status: PackageStatus
+  deadline: string
+  createdAt: string
+  firstDeliveredAt: string
+  rounds: Array<{ round: number; submittedAt: string; outcome: SubmissionOutcome; sentToClientAt: string | null; clientDecidedAt: string | null }>
 }
 
 export interface ActivityEvent {
@@ -147,6 +188,15 @@ export type NotificationType =
   | 'approved'
   | 'deadline_changed'
   | 'manager_changed'
+  | 'on_hold'
+  | 'resumed'
+  | 'cancelled'
+  | 'reopened'
+  | 'deleted'
+  | 'sent_to_client'
+  | 'client_approved'
+  | 'client_feedback'
+  | 'delivery_added'
 
 export type StaffChangeType = 'account_created' | 'approved' | 'role_changed' | 'deactivated' | 'reactivated' | 'details_changed'
 
@@ -169,7 +219,8 @@ export interface AppNotification {
   id: string
   recipientId: string
   type: NotificationType
-  packageId: string
+  /** Null when the package was deleted: the notice stays, with nothing to open. */
+  packageId: string | null
   actorId: string
   message: string
   createdAt: string

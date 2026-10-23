@@ -1,7 +1,10 @@
 // Live updates from Supabase Realtime, refreshing only what another person changed.
 //
 //  activity            every package change writes one (create, edit, start, submit,
-//                      feedback, approve), so it alone tells us which package moved.
+//                      feedback, approve, hold, cancel, archive, reopen…), so it alone
+//                      tells us which package moved.
+//  packages (DELETE)   a package nobody had started was deleted; its activity went
+//                      with it. Realtime sends only the id for deletes.
 //                      Changes made in this tab are skipped: api.ts already refreshed
 //                      them. The same person's changes in another tab still refresh.
 //  attendance_sessions someone clocked in or out, or a session was auto-closed.
@@ -62,7 +65,10 @@ export function useLiveUpdates(personId: string) {
       .channel(`cne-live-${personId}-${(subscriptions += 1)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity' }, ({ new: row }) => {
         if (fromThisTab(row.actor_id)) return
-        refresh(keys.activeWork, keys.package(row.package_id), ['finished'], ['rounds'], ['recent'])
+        refresh(keys.activeWork, keys.package(row.package_id), ['finished'], ['rounds'], ['recent'], ['report'])
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'packages' }, ({ old }) => {
+        refresh(keys.activeWork, ['finished'], ...(old.id ? [keys.package(old.id)] : []))
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_sessions' }, (change) => {
         const row = (change.eventType === 'DELETE' ? change.old : change.new) as { person_id?: string }
@@ -72,7 +78,8 @@ export function useLiveUpdates(personId: string) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${personId}` }, (change) => {
         if (change.eventType === 'UPDATE' && notificationUpToDate(change.new)) return
         refresh(['notifications', 'list', personId], keys.unreadCount(personId))
-        if (change.eventType === 'INSERT') refresh(keys.activeWork, keys.package(change.new.package_id))
+        // A notice about a deleted package has no package_id.
+        if (change.eventType === 'INSERT') refresh(keys.activeWork, ...(change.new.package_id ? [keys.package(change.new.package_id)] : []))
       })
       .subscribe()
 

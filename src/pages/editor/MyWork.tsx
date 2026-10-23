@@ -37,6 +37,8 @@ export function MyWork() {
   const active = work.data!.filter((p) => p.editorId === me.id && isActive(p))
   const changes = active.filter((p) => p.status === 'apply_feedback')
   const others = active.filter((p) => p.status !== 'apply_feedback')
+  // With the client or paused by a manager: not active work (no overdue, no submitting) but still theirs.
+  const waiting = work.data!.filter((p) => p.editorId === me.id && (p.status === 'client_review' || p.status === 'on_hold'))
   const recent = pagedRows(finished.data).slice(0, 5)
   const weekSessions = attendance.data!.filter((s) => withinDays(s.clockIn, 7, now))
 
@@ -48,7 +50,7 @@ export function MyWork() {
         <KpiStat label="Needs changes" value={changes.length} icon={RotateCcw} to="/needs-changes" tone="attention" />
         <KpiStat label="Due in 7 days" value={active.filter((p) => isDueWithin(p, now, 7 * DAY_MS)).length} icon={CalendarClock} />
         <KpiStat label="Overdue" value={active.filter((p) => isOverdue(p, now)).length} icon={TriangleAlert} tone="danger" />
-        <KpiStat label="Completed" value={pagedTotal(finished.data)} icon={CircleCheck} to="/history" />
+        <KpiStat label="Finished" value={pagedTotal(finished.data)} icon={CircleCheck} to="/history" />
       </KpiStrip>
 
       <div className="grid gap-5 xl:grid-cols-3">
@@ -82,8 +84,25 @@ export function MyWork() {
             )}
           </Section>
 
+          {waiting.length > 0 && (
+            <Section
+              title={`Waiting on others (${waiting.length})`}
+              description="With the client, or paused by a manager. You’ll be notified when they move."
+              flush
+            >
+              <PackageTable
+                lookup={lookup}
+                packages={waiting}
+                now={now}
+                caption="Waiting on others"
+                columns={['package', 'product', 'status', 'deadline']}
+                action={(pkg) => <EditorPackageAction pkg={pkg} />}
+              />
+            </Section>
+          )}
+
           <Section
-            title="Recently completed"
+            title="Recently finished"
             flush
             actions={
               <Link to="/history" className="text-sm font-semibold text-primary hover:underline">
@@ -92,9 +111,9 @@ export function MyWork() {
             }
           >
             {recent.length ? (
-              <PackageTable lookup={lookup} packages={recent} now={now} caption="Recently completed" columns={['package', 'product', 'status', 'round']} />
+              <PackageTable lookup={lookup} packages={recent} now={now} caption="Recently finished" columns={['package', 'product', 'status', 'round']} />
             ) : (
-              <EmptyState icon={CircleCheck} title="No completed work yet" compact />
+              <EmptyState icon={CircleCheck} title="No finished work yet" compact />
             )}
           </Section>
         </div>

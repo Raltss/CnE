@@ -1,6 +1,6 @@
 # Database security and workflow checks
 
-`security_and_workflow.test.sql` signs in as each kind of user (by setting the JWT `sub` claim, the way Supabase does) and checks about 125 rules:
+`security_and_workflow.test.sql` signs in as each kind of user (by setting the JWT `sub` claim, the way Supabase does) and checks about 215 rules:
 
 - anonymous visitors and not-yet-approved accounts can't read or do anything
 - nobody can change their own role; only admins change other people's roles or access, only through the staff functions, never to or from admin
@@ -11,6 +11,8 @@
 - tables can't be written directly; only the workflow functions change data
 - managers add products by name (unique, ignoring case), editors and admins can't; packages need no client
 - the full package workflow, the delivery-link rule for approval, reassignment notifications
+- the package lifecycle: hold and resume (back to the exact status), cancel, archive and unarchive, reopen (approved round kept), delete only before work starts (with a notice that has no link), editing completed and cancelled packages without changing the editor or deadline, and product rename (unique, ignoring case); editors and admins are refused every one
+- client review: sending a round to the client, recording the client's approval (only with a delivery link) or changes (counted against the product's included revisions, with the overage in the history), the editor adding a missing delivery link (never overwriting one), and the first delivery time the reports use
 - one open attendance session per person, and the 16-hour auto-close
 - deactivated staff lose access but their history stays
 

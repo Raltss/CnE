@@ -2,7 +2,7 @@ import { ShieldCheck } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { api } from '../../data/api'
 import { useAccountHistory, useActiveWork } from '../../data/queries'
-import { accessOf, isActive, roleChangeBlocker } from '../../data/selectors'
+import { accessOf, CURRENT_STATUSES, roleChangeBlocker } from '../../data/selectors'
 import type { AssignableRole, Person, StaffAccount } from '../../data/types'
 import { ROLE_META } from '../../lib/status'
 import { buttonClasses } from '../../lib/styles'
@@ -45,7 +45,7 @@ export function StaffAccessDialog({ accounts, account, me, onClose }: StaffAcces
   const packages = work.data ?? []
   const locked = account.id === me.id ? 'You can’t change your own role or access.' : account.role === 'admin' ? 'Admin accounts are managed in the Supabase SQL editor, not in the app.' : null
   const blocker = access !== 'pending' && account.role !== role ? roleChangeBlocker(packages, account) : null
-  const openWork = packages.filter((p) => isActive(p) && (p.editorId === account.id || p.responsibleManagerId === account.id)).length
+  const openWork = packages.filter((p) => CURRENT_STATUSES.includes(p.status) && (p.editorId === account.id || p.responsibleManagerId === account.id)).length
 
   const run = async (command: () => ReturnType<typeof api.approveAccount>, success: string) => {
     setBusy(true)

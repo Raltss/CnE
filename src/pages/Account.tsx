@@ -1,10 +1,11 @@
 import { PasswordForm } from '../components/domain/PasswordForm'
 import { RoleBadge } from '../components/domain/StatusBadge'
 import { PageHeader, Section } from '../components/ui/Section'
+import { ThemePicker } from '../components/ui/ThemeToggle'
 import { useToast } from '../components/ui/toast-context'
 import { useSession } from '../session/context'
 
-/** Everyone: who you're signed in as, and changing your password. */
+/** Everyone: who you're signed in as, how the app looks, and changing your password. */
 export function Account() {
   const { me, email, changePassword } = useSession()
   const toast = useToast()
@@ -13,32 +14,38 @@ export function Account() {
     <>
       <PageHeader title="Your account" description="Your sign-in details. Your role is managed by an admin." />
       <div className="grid gap-5 lg:grid-cols-5 lg:items-start">
-        <Section title="Profile" className="lg:col-span-2">
-          <dl className="grid gap-3 text-sm">
-            <div>
-              <dt className="text-xs font-semibold text-muted-fg">Name</dt>
-              <dd className="font-semibold">{me.name}</dd>
-            </div>
-            {email && (
+        <div className="flex flex-col gap-5 lg:col-span-2">
+          <Section title="Profile">
+            <dl className="grid gap-3 text-sm">
               <div>
-                <dt className="text-xs font-semibold text-muted-fg">Email</dt>
-                <dd className="break-all">{email}</dd>
+                <dt className="text-xs font-semibold text-muted-fg">Name</dt>
+                <dd className="font-semibold">{me.name}</dd>
               </div>
-            )}
-            {me.title && (
+              {email && (
+                <div>
+                  <dt className="text-xs font-semibold text-muted-fg">Email</dt>
+                  <dd className="break-all">{email}</dd>
+                </div>
+              )}
+              {me.title && (
+                <div>
+                  <dt className="text-xs font-semibold text-muted-fg">Job title</dt>
+                  <dd>{me.title}</dd>
+                </div>
+              )}
               <div>
-                <dt className="text-xs font-semibold text-muted-fg">Job title</dt>
-                <dd>{me.title}</dd>
+                <dt className="text-xs font-semibold text-muted-fg">Role</dt>
+                <dd className="mt-0.5">
+                  <RoleBadge role={me.role} />
+                </dd>
               </div>
-            )}
-            <div>
-              <dt className="text-xs font-semibold text-muted-fg">Role</dt>
-              <dd className="mt-0.5">
-                <RoleBadge role={me.role} />
-              </dd>
-            </div>
-          </dl>
-        </Section>
+            </dl>
+          </Section>
+
+          <Section title="Appearance">
+            <ThemePicker />
+          </Section>
+        </div>
 
         <Section title="Change password" description="You’ll stay signed in on this device." className="lg:col-span-3">
           <PasswordForm

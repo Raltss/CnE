@@ -3,7 +3,8 @@
 // every person is a separate signed-in Supabase session (no service-role key).
 //
 // It adds a test manager and two test editors through the create-staff-account Edge
-// Function (Add user), then runs the v1 workflow and checks permissions, notifications
+// Function (Add user), then runs the v1 workflow and the package lifecycle (hold, resume,
+// delete, reopen, cancel, archive, product edits), client review, and checks permissions, notifications
 // (rows and Realtime delivery), attendance, and access for deactivated and unapproved
 // accounts. At the end it deactivates the test accounts (their history stays).
 // Test records stay in the project. Never run it against production.
@@ -303,7 +304,66 @@ async function main() {
   const deadlineEntry = moved?.activity.find((a) => a.type === 'deadline_changed')?.message ?? ''
   check(deadlineEntry.includes(`${manila} PHT`), 'deadline changes are recorded in Manila time (PHT)', `${deadlineEntry} (expected ${manila} PHT)`)
 
-  // 12. Attendance: one open session, survives a fresh session ("refresh"), team visibility.
+  // 12. Lifecycle (2026-10-23): hold and resume, delete an unstarted package, reopen, cancel, archive, rename a product.
+  const succeeded = (r) => ({ ...r, data: r.error ? null : true })
+  const third = must(await manager.client.rpc('create_package', { ...packageArgs, p_title: `E2E Lifecycle ${RUN}` }), 'manager creates a package for the lifecycle checks')
+  await refused('editors cannot put packages on hold', () => editor.client.rpc('hold_package', { p_package_id: third, p_reason: null }), /Only managers/)
+  await refused('admins cannot put packages on hold', () => admin.client.rpc('hold_package', { p_package_id: third, p_reason: null }), /Only managers/)
+  must(await manager.client.rpc('hold_package', { p_package_id: third, p_reason: 'E2E pause' }).then(succeeded), 'manager puts a package on hold')
+  check(await waitFor(() => editorInbox.events.some((e) => e.new?.type === 'on_hold')), 'editor gets the "on hold" notification live (Realtime)')
+  await refused('a package on hold cannot be started', () => editor.client.rpc('start_work', { p_package_id: third }), /on hold/)
+  must(await manager.client.rpc('resume_package', { p_package_id: third }).then(succeeded), 'manager resumes it')
+  const resumed = (await manager.client.from('packages').select('status').eq('id', third).single()).data
+  check(resumed?.status === 'assigned', 'resuming returns it to its previous status', resumed?.status)
+  must(await manager.client.rpc('delete_package', { p_package_id: third }).then(succeeded), 'manager deletes a package nobody started')
+  check(
+    await waitFor(() => editorInbox.events.some((e) => e.new?.type === 'deleted' && e.new?.package_id === null)),
+    'editor gets the "deleted" notification live, with no package link',
+  )
+  const gone = await manager.client.from('packages').select('id').eq('id', third)
+  check(!gone.error && gone.data.length === 0, 'the deleted package is gone')
+  await refused('a package with work cannot be deleted', () => manager.client.rpc('delete_package', { p_package_id: second }), /haven.t been started/)
+  must(await manager.client.rpc('reopen_package', { p_package_id: packageId, p_note: 'E2E reopen' }).then(succeeded), 'manager reopens the completed package')
+  check(await waitFor(() => editorInbox.events.some((e) => e.new?.type === 'reopened')), 'editor gets the "reopened" notification live (Realtime)')
+  must(await manager.client.rpc('cancel_package', { p_package_id: packageId, p_reason: 'E2E cancel' }).then(succeeded), 'manager cancels it')
+  must(await manager.client.rpc('archive_package', { p_package_id: packageId }).then(succeeded), 'manager archives it')
+  const archived = (await editor.client.from('packages').select('status, rounds:submissions(round)').eq('id', packageId).single()).data
+  check(archived?.status === 'archived' && archived.rounds.length === 2, 'the archived package keeps every round and stays visible to its editor', JSON.stringify(archived))
+  await refused('editors cannot edit products', () => editor.client.rpc('update_product', { p_product_id: productId, p_name: `Editor ${RUN}`, p_included_revisions: null }), /Only managers/)
+  must(
+    await manager.client.rpc('update_product', { p_product_id: productId, p_name: `${productName} (renamed)`, p_included_revisions: 1 }).then(succeeded),
+    'manager renames the product and includes 1 client revision',
+  )
+
+  // 13. Client review (2026-10-23): send to the client, client changes, delivery link added later, client approval.
+  const clientPkg = must(await manager.client.rpc('create_package', { ...packageArgs, p_title: `E2E Client ${RUN}` }), 'manager creates a package for client review')
+  await editor.client.rpc('start_work', { p_package_id: clientPkg })
+  await editor.client.rpc('submit_for_review', { p_package_id: clientPkg, p_review_link: 'https://f.io/e2e-client-1', p_delivery_link: null })
+  await refused('editors cannot send work to the client', () => editor.client.rpc('send_to_client', { p_package_id: clientPkg }), /Only managers/)
+  must(await manager.client.rpc('send_to_client', { p_package_id: clientPkg }).then(succeeded), 'manager sends Round 1 to the client')
+  check(await waitFor(() => editorInbox.events.some((e) => e.new?.type === 'sent_to_client')), 'editor gets the "sent to the client" notification live (Realtime)')
+  must(await manager.client.rpc('record_client_feedback', { p_package_id: clientPkg, p_note: 'E2E client note' }).then(succeeded), 'manager records the client’s changes')
+  check(await waitFor(() => editorInbox.events.some((e) => e.new?.type === 'client_feedback')), 'editor gets the "client feedback" notification live (Realtime)')
+  await editor.client.rpc('submit_for_review', { p_package_id: clientPkg, p_review_link: 'https://f.io/e2e-client-2', p_delivery_link: null })
+  must(await manager.client.rpc('send_to_client', { p_package_id: clientPkg }).then(succeeded), 'manager sends Round 2 to the client')
+  await refused('the client’s approval needs a delivery link', () => manager.client.rpc('record_client_approval', { p_package_id: clientPkg }), /no delivery link/)
+  must(
+    await editor.client.rpc('add_delivery_link', { p_package_id: clientPkg, p_delivery_link: 'https://drive.google.com/e2e-client-final' }).then(succeeded),
+    'editor adds the delivery link while the package is with the client',
+  )
+  must(await manager.client.rpc('record_client_approval', { p_package_id: clientPkg }).then(succeeded), 'manager records the client’s approval')
+  const clientDone = (await manager.client.from('packages').select('status, first_delivered_at, rounds:submissions(round, outcome)').eq('id', clientPkg).single()).data
+  check(
+    clientDone?.status === 'completed' &&
+      Boolean(clientDone.first_delivered_at) &&
+      clientDone.rounds.sort((a, b) => a.round - b.round).map((r) => r.outcome).join() === 'client_feedback,approved',
+    'the package is Completed, with its first delivery and both client decisions recorded',
+    JSON.stringify(clientDone),
+  )
+  const report = await manager.client.from('packages').select('id').eq('id', clientPkg).not('first_delivered_at', 'is', null)
+  check(!report.error && report.data.length === 1, 'reports can read the first delivery time')
+
+  // 14. Attendance: one open session, survives a fresh session ("refresh"), team visibility.
   await editor.client.rpc('clock_out') // in case an earlier run left one open
   must(await editor.client.rpc('clock_in'), 'editor clocks in')
   await refused('a second clock-in is refused while one is open', () => editor.client.rpc('clock_in'), /already clocked in/)
@@ -322,7 +382,7 @@ async function main() {
   await refused('clocking out twice is refused', () => editor.client.rpc('clock_out'), /aren.t clocked in/)
   await manager.client.rpc('clock_out')
 
-  // 13. Deactivated and unapproved accounts can't read business data.
+  // 15. Deactivated and unapproved accounts can't read business data.
   must(await admin.client.rpc('deactivate_account', { p_profile_id: other.id }).then((r) => ({ ...r, data: r.error ? null : true })), 'admin deactivates the other editor')
   const after = await Promise.all([
     other.client.from('packages').select('id'),

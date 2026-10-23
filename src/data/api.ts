@@ -7,8 +7,20 @@ import { supabase } from '../lib/supabase'
 import { markOwnChange } from './live'
 import { friendlyError, keys } from './queries'
 import { queryClient } from './queryClient'
-import type { ActionResult, AppNotification, AssignableRole, PackageInput, Page, Person, Product, StaffAccount, StaffAccountInput, SubmissionInput } from './types'
-import { validatePackageInput, validateProductName, validateStaffAccountInput, validateSubmissionInput } from './validation'
+import type {
+  ActionResult,
+  AppNotification,
+  AssignableRole,
+  PackageInput,
+  PackageSummary,
+  Page,
+  Person,
+  Product,
+  StaffAccount,
+  StaffAccountInput,
+  SubmissionInput,
+} from './types'
+import { isHttpUrl, validatePackageInput, validateProductName, validateStaffAccountInput, validateSubmissionInput } from './validation'
 
 const fail = (error: string, fieldErrors?: Record<string, string>): ActionResult<never> => ({ ok: false, error, fieldErrors })
 
@@ -74,12 +86,14 @@ function packageArgs(input: PackageInput) {
   }
 }
 
+type EditedPackage = Pick<PackageSummary, 'id' | 'status' | 'editorId' | 'deadline'>
+
 /** Same field checks as the database, so forms can show errors under each field before sending. */
-function packageFieldErrors(input: PackageInput, previousDeadline?: string) {
+function packageFieldErrors(input: PackageInput, previous?: EditedPackage) {
   const people = cached<Person[]>(keys.people)
   const products = cached<Product[]>(keys.products)
   if (!people || !products) return null
-  const errors = validatePackageInput({ people, products }, input, { now: new Date(), previousDeadline })
+  const errors = validatePackageInput({ people, products }, input, { now: new Date(), previousDeadline: previous?.deadline, previous })
   return Object.keys(errors).length ? fail('Fix the highlighted fields.', errors as Record<string, string>) : null
 }
 
@@ -106,6 +120,16 @@ function markReadInCache(personId: string, ids: 'all' | string[]) {
   else void queryClient.invalidateQueries({ queryKey: keys.unreadCount(personId) })
 }
 
+/** Everything a status change can move: current work, the package, finished lists, rounds, recent decisions, reports. */
+const lifecycleKeys = (packageId: string): QueryKey[] => [keys.activeWork, keys.package(packageId), ['finished'], ['rounds'], ['recent'], ['report']]
+
+const NOTE_TOO_LONG = 'Keep the note under 500 characters.'
+
+/** Same 500-character limit as the database, checked before sending. */
+function withNote<T>(note: string, send: () => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
+  return note.trim().length > 500 ? Promise.resolve(fail(NOTE_TOO_LONG, { note: NOTE_TOO_LONG })) : send()
+}
+
 export const api = {
   // ── Packages ──
   async createPackage(input: PackageInput): Promise<ActionResult<{ id: string; code: string }>> {
@@ -116,18 +140,34 @@ export const api = {
     const code = cached<Array<{ id: string; code: string }>>(keys.activeWork)?.find((p) => p.id === result.value)?.code ?? 'Package'
     return { ok: true, value: { id: result.value, code } }
   },
-  async updatePackage(packageId: string, input: PackageInput, previousDeadline: string): Promise<ActionResult<{ id: string }>> {
-    const invalid = packageFieldErrors(input, previousDeadline)
+  async updatePackage(previous: EditedPackage, input: PackageInput): Promise<ActionResult<{ id: string }>> {
+    const invalid = packageFieldErrors(input, previous)
     if (invalid) return invalid
-    const result = await call<string>('update_package', { p_package_id: packageId, ...packageArgs(input) }, [keys.activeWork, keys.package(packageId)])
-    return result.ok ? { ok: true, value: { id: packageId } } : result
+    const result = await call<string>('update_package', { p_package_id: previous.id, ...packageArgs(input) }, [
+      keys.activeWork,
+      keys.package(previous.id),
+      ['finished'],
+    ])
+    return result.ok ? { ok: true, value: { id: previous.id } } : result
   },
-  async createProduct(name: string): Promise<ActionResult<Product>> {
+  /** `includedRevisions`: client revisions included with the product, or null for no limit. */
+  async createProduct(name: string, includedRevisions: number | null = null): Promise<ActionResult<Product>> {
     const problem = validateProductName(cached<Product[]>(keys.products) ?? [], name)
     if (problem) return fail(problem, { name: problem })
-    const result = await call<string>('create_product', { p_name: name.trim() }, [keys.products])
+    const result = await call<string>('create_product', { p_name: name.trim(), p_included_revisions: includedRevisions }, [keys.products])
     if (!result.ok) return { ...result, fieldErrors: { name: result.error } }
-    return { ok: true, value: { id: result.value, name: name.trim() } }
+    return { ok: true, value: { id: result.value, name: name.trim(), includedRevisions } }
+  },
+  async updateProduct(productId: string, name: string, includedRevisions: number | null): Promise<ActionResult<Product>> {
+    const problem = validateProductName(cached<Product[]>(keys.products) ?? [], name, productId)
+    if (problem) return fail(problem, { name: problem })
+    // Package pages show the allowance, and reports count against it.
+    const result = await call('update_product', { p_product_id: productId, p_name: name.trim(), p_included_revisions: includedRevisions }, [
+      keys.products,
+      ['report'],
+    ])
+    if (!result.ok) return { ...result, fieldErrors: { name: result.error } }
+    return { ok: true, value: { id: productId, name: name.trim(), includedRevisions } }
   },
   startWork: (packageId: string) => call('start_work', { p_package_id: packageId }, [keys.activeWork, keys.package(packageId)]),
   async submitForReview(packageId: string, input: SubmissionInput) {
@@ -140,11 +180,37 @@ export const api = {
     ])
   },
   async requestFeedback(packageId: string, note: string) {
-    if (note.trim().length > 500) return fail('Keep the note under 500 characters.', { note: 'Keep the note under 500 characters.' })
+    if (note.trim().length > 500) return fail(NOTE_TOO_LONG, { note: NOTE_TOO_LONG })
     return call('request_feedback', { p_package_id: packageId, p_note: note }, [keys.activeWork, keys.package(packageId), ['rounds'], ['recent']])
   },
-  approve: (packageId: string) =>
-    call('approve_package', { p_package_id: packageId }, [keys.activeWork, keys.package(packageId), ['finished'], ['rounds'], ['recent']]),
+  /** Approve and complete without client review. */
+  approve: (packageId: string) => call('approve_package', { p_package_id: packageId }, lifecycleKeys(packageId)),
+
+  // ── Client review (managers record the client's decision; clients don't sign in) ──
+  sendToClient: (packageId: string) => call('send_to_client', { p_package_id: packageId }, lifecycleKeys(packageId)),
+  recordClientApproval: (packageId: string) => call('record_client_approval', { p_package_id: packageId }, lifecycleKeys(packageId)),
+  recordClientFeedback: (packageId: string, note: string) =>
+    withNote(note, () => call('record_client_feedback', { p_package_id: packageId, p_note: note }, lifecycleKeys(packageId))),
+  /** Editors: the final delivery link for a round that has none yet. */
+  async addDeliveryLink(packageId: string, link: string): Promise<ActionResult<unknown>> {
+    if (!isHttpUrl(link.trim())) return fail('Enter a full link starting with https://', { link: 'Enter a full link starting with https://' })
+    return call('add_delivery_link', { p_package_id: packageId, p_delivery_link: link.trim() }, [keys.activeWork, keys.package(packageId), ['rounds']])
+  },
+
+  // ── Package lifecycle (managers): PRD §5. Reasons and notes are optional. ──
+  holdPackage: (packageId: string, reason: string) => withNote(reason, () => call('hold_package', { p_package_id: packageId, p_reason: reason }, lifecycleKeys(packageId))),
+  resumePackage: (packageId: string) => call('resume_package', { p_package_id: packageId }, lifecycleKeys(packageId)),
+  cancelPackage: (packageId: string, reason: string) =>
+    withNote(reason, () => call('cancel_package', { p_package_id: packageId, p_reason: reason }, lifecycleKeys(packageId))),
+  archivePackage: (packageId: string) => call('archive_package', { p_package_id: packageId }, lifecycleKeys(packageId)),
+  unarchivePackage: (packageId: string) => call('unarchive_package', { p_package_id: packageId }, lifecycleKeys(packageId)),
+  reopenPackage: (packageId: string, note: string) => withNote(note, () => call('reopen_package', { p_package_id: packageId, p_note: note }, lifecycleKeys(packageId))),
+  /** Only for a package nobody has started; anything else is cancelled instead. */
+  async deletePackage(packageId: string): Promise<ActionResult<unknown>> {
+    const result = await call('delete_package', { p_package_id: packageId }, [keys.activeWork, ['finished']])
+    if (result.ok) queryClient.removeQueries({ queryKey: keys.package(packageId) })
+    return result
+  },
 
   // ── Attendance ──
   clockIn: () => call('clock_in', undefined, [['attendance']]),

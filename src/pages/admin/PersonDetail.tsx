@@ -333,11 +333,15 @@ function RoundsTab({ person, lookup, params, set, decisions }: TabProps & { look
   const outcomes = decisions
     ? [
         { value: 'approved', label: 'Approved' },
+        { value: 'with_client', label: 'Sent to the client' },
+        { value: 'client_feedback', label: 'Client asked for changes' },
         { value: 'feedback', label: 'Apply Feedback' },
       ]
     : [
         { value: 'pending', label: 'Awaiting review' },
         { value: 'feedback', label: 'Apply Feedback' },
+        { value: 'with_client', label: 'With the client' },
+        { value: 'client_feedback', label: 'Client asked for changes' },
         { value: 'approved', label: 'Approved' },
       ]
 
