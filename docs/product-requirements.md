@@ -12,7 +12,7 @@ CnE is an internal workflow web application for a video editing agency. It track
 
 - React, TypeScript, Vite
 - Supabase for the database, authentication, and Realtime
-- UI design follows the **UI UX Pro Max** skill (see `CLAUDE.md`)
+- UI design follows the **Seenry** skills and the "Playhead" design system (see `CLAUDE.md`; redesigned 2026-10-26, replacing UI UX Pro Max)
 - Approved UI dependencies: Tailwind CSS v4 + shadcn/ui (Radix), lucide-react, react-router, @tanstack/react-query
 - Approved Supabase pieces: Realtime (notifications and the review queue) and an Edge Function for adding staff (`create-staff-account`, in use since 2026-10-21; see Accounts)
 
@@ -262,10 +262,15 @@ Answers to the open planning questions.
 
 ## 11. Interface proposal (approved)
 
-Designed with UI UX Pro Max (`--design-system`; dials: variance 3, motion 2, density 8). Saved as `design-system/cne/MASTER.md` (page overrides go in `design-system/cne/pages/`).
+Originally designed with UI UX Pro Max (2026-10-21, revised 2026-10-23). **Redesigned 2026-10-26 at the user's request with the Seenry skill** ("Playhead"): identity first, three directions picked blind against category leaders, built and checked with Seenry's gates. Saved as `design-system/cne/MASTER.md` (page overrides go in `design-system/cne/pages/`). Workflows, routes, permissions and data are unchanged; the redesign is presentation and interaction.
 
 ### Style
-Minimalism / Swiss: dense, grid-based, high contrast, functional. Warm light and dark themes through tokens: each person picks Light, Dark, or Match device (top bar toggle and Your account), saved per browser. *(Warm palette, theme choice, and fonts revised 2026-10-23 at the user's request.)* Motion is limited to 150–250ms hover/focus transitions and respects `prefers-reduced-motion`. No scroll or decorative animation.
+Quiet premium production tool. The idea is **where now is, and whose turn it is**: a playhead (a red line with a flag at now) runs through every view with time in it: the deadline track on the home screens and Deadlines, the rounds track on a package, the open session on Time Clock, today on Calendar, and the runway in table rows. Overdue work is simply past its out-point, in the same red. A dark graphite "bay" (sidebar, top bar, phone tab bar) frames monitor-white work surfaces on a cool suite-grey canvas; ink is the one action color. Light and dark themes through tokens: each person picks Light, Dark, or Match device (top bar toggle and Your account), saved per browser. Interface motion only: 120ms hover and press, 180ms toggles and tabs, 240ms dialogs and toasts, all off under `prefers-reduced-motion`.
+
+### Home screens (2026-10-26)
+- **Manager Dashboard:** views with counts (Needs review, With client, Overdue, Due in 48h, All active; in the URL) over the deadline track; each row ends in its action (Review R{n} opens the review dialog). Team workload below. The figure tiles and their dialogs were replaced by the views.
+- **Editor My Work:** Next up (the one cut to work on now, with the manager's note, countdown and action) beside the clock card, then current work on the track, recently finished and this week's attendance.
+- **Admin Overview:** View only note, the track with Overdue / Waiting for review / Due in 48h / All active, then editor workload, clocked in now and managers.
 
 ### Navigation (role-based)
 - **Desktop ≥1024px:** collapsible left sidebar, plus a top bar with global search, a **clock-in/out pill** (live Manila time and session duration), a notifications bell with unread count, and a user menu.
@@ -273,7 +278,7 @@ Minimalism / Swiss: dense, grid-based, high contrast, functional. Warm light and
 - **Manager:** Dashboard · Review Queue · Deadlines · Packages · Calendar · Time Clock · Attendance · Reports · Notifications. Products are added from Packages (no separate Clients & Products page; clients removed 2026-10-21). *(Deadlines and Time Clock added 2026-10-21 at the user's request, to take upcoming/overdue work and clock-in/out off the dashboard.)*
 - **Editor:** My Work · Needs Changes · History · Attendance · Notifications
 - **Admin:** Overview · Team · Packages · Calendar · Attendance · Reports · Staff & Roles. No clock pill and no notifications. *(Revised 2026-10-21 for read-only oversight; see `design-system/cne/pages/admin.md`.)*
-- **Everyone:** **Your account** (profile and Change password), linked from the sidebar footer, or by tapping your name in the top bar on small screens.
+- **Everyone:** **Your account** (profile and Change password), linked from the sidebar footer, or the avatar in the top bar on phones (Your account also has Sign out and the theme choice there).
 - Every package and every list filter has its own URL (filters kept in the query string).
 
 ### Manager dashboard
@@ -312,37 +317,38 @@ Right rail (desktop) / section (mobile): my attendance this week, clock button, 
 - **Role-aware action bar:** Start / Submit / Approve / Apply Feedback / Hold / Resume / Cancel / Archive / Reopen / Reassign.
 - **Timeline:** submission rounds merged with status, deadline, assignment, and responsible-manager changes.
 
-### Colors (semantic tokens, AA checked)
+### Colors (semantic tokens, AA checked; full table in MASTER.md)
 | Token | Light | Dark |
 |---|---|---|
-| `--color-primary` | terracotta `#B4471F` (white text 5.4:1) | `#F0956B` (dark text 7.7:1) |
-| `--color-accent` | `#A15C07` | `#F5B94A` |
-| `--color-bg` | cream `#FAF6F1` | `#1A1512` |
-| `--color-surface` | `#FFFDFA` | `#221C18` |
-| `--color-fg` | `#2A211B` | `#F4ECE3` |
-| `--color-muted-fg` | `#6E5F53` | `#B8A796` |
-| `--color-border` | `#E7DDD1` | `#3A3029` |
-| `--color-ring` | `#B4471F` | `#F0956B` |
+| `--color-primary` | ink `#15181E` (white text 17:1) | `#EDEEF1` (dark text 16:1) |
+| `--color-now` | playhead red `#CE2D11` (5.2:1), now and overdue only | `#F3654C` |
+| `--color-chrome` | bay graphite `#15171B` | `#06070A` |
+| `--color-bg` | suite grey `#F8F9FB` | `#0D0E11` |
+| `--color-surface` | `#FFFFFF` | `#141619` |
+| `--color-fg` | `#15181E` | `#EFF0F3` |
+| `--color-muted-fg` | `#54585F` (7.1:1) | `#A8ABB0` |
+| `--color-border` | `#E2E4E7` | white 9% |
+| `--color-ring` | ink (light on the bay) | `#EDEEF1` |
 
 Statuses always show an **icon and a text label**, never color alone:
 
 | Status | Color | Icon (lucide) |
 |---|---|---|
-| Assigned | warm gray `#5C4F45` | `circle` |
-| In Progress | blue `#1D4ED8` | `play` |
-| Submitted | violet `#6D28D9` | `upload` |
-| With Client | teal `#0E6A80` | `send` |
-| Apply Feedback | orange `#B13C0A` | `rotate-ccw` |
-| Completed | green `#2B7330` | `check` |
-| On Hold | amber `#975106` | `pause` |
-| Cancelled | warm gray `#6B5F56` | `x` |
-| Archived | warm gray `#6B5F56` | `archive` |
-| Overdue (modifier) | red `#B42318` | `alert-triangle` |
+| Assigned | gray `#52555B` | `circle` |
+| In Progress | blue `#195DAA` | `play` |
+| Submitted | violet `#6744AC` | `upload` |
+| With Client | teal `#056774` | `send` |
+| Apply Feedback | orange `#9B4805` | `rotate-ccw` |
+| Completed | green `#206B38` | `check` |
+| On Hold | amber `#7D5E07` | `pause` |
+| Cancelled | gray `#585B5F` | `x` |
+| Archived | gray `#585B5F` | `archive` |
+| Overdue (modifier) | white on playhead red `#CE2D11` | `alert-triangle` |
 
 ### Typography and spacing
-- **Nunito Sans** (400/500/600/700) for all UI text, and **Fraunces** (600–700) for page titles and the CnE wordmark. Numbers, times, and counts use `tabular-nums`.
-- Type scale: 12 / 14 (table body) / 16 (body) / 18 / 20 / 24 / 30. Line height 1.5 for body, 1.25 for headings.
-- Spacing: 4px base, mostly 8–32px.
+- **Geist** (400/500/600) for everything people read; **Geist Mono** for package codes, round labels and the display clocks. Times, durations and counts use Geist with `tabular-nums`. No 700.
+- Type scale: 13 (badges, the floor) / 14 (meta, column headers) / 15 (UI and table cells) / 16 (body) / 18 / 24 / 28 (page titles, −0.025em). Line height 1.5 for body, 1.25 for headings.
+- Spacing: 4px base, mostly 8–32px. Radius 6 / 8 (controls) / 12 (cards) / 16 (dialogs). Controls 44px on desktop, 48px on phones.
 
 ### Reusable components
 AppShell (Sidebar, TopBar, BottomNav) · RoleGuard · ClockInOutPill · StatusBadge · DeadlineBadge · KpiStat · FilterBar · DataTable · PackageCard · PackageHeader · PackageActionBar · LinkField / LinkGroup (labeled, icon, opens externally, copy button) · SubmissionForm (URL validation; delivery optional) · FeedbackDialog (optional note) · ReassignDialog · ActivityTimeline · NotificationBell + NotificationList · WorkloadBar · AttendanceTable · CorrectionRequestDialog / CorrectionReviewDialog (reason required) · ConfirmDialog · EmptyState · ErrorState (retry) · Skeleton · Toast · FormField (visible label, inline error).
@@ -378,7 +384,7 @@ Package lifecycle and product rename (2026-10-23): 182 SQL checks on plain Postg
 | Manager / editor dashboards | ✅ Manager Dashboard, Review Queue, Deadlines, Packages, Time Clock, Attendance; editor My Work, Needs Changes, History, Attendance |
 | Admin (staff and roles) | ✅ Staff & Roles: add users, approve, change manager ↔ editor, deactivate/reactivate, account history naming the admin. First admin via `first-admin.sql` |
 | Admin oversight | ✅ Overview, Team, per-person pages, read-only Packages, package detail, and Attendance, all labeled View only |
-| Look and feel | ✅ Warm palette in light and dark, theme toggle (top bar, sign-in screens) and Light / Dark / Match device on Your account, Nunito Sans + Fraunces (2026-10-23). Sign-in starts each person on their own home page; reloads show a plain loader |
+| Look and feel | ✅ **Redesigned 2026-10-26 with Seenry ("Playhead")**: bay chrome, ink actions, Geist + Geist Mono, the playhead device (deadline track, rounds track, session track, runway), new home screens; light and dark checked for AA. Before that: warm palette, Nunito Sans + Fraunces (2026-10-23). Theme toggle (top bar, sign-in screens) and Light / Dark / Match device on Your account. Sign-in starts each person on their own home page; reloads show a plain loader |
 | Performance and loading | ✅ Each page loads only what it shows; a change or live update refetches only lists on screen (manager Dashboard: 7 reads after sign-in, 2 after someone else's submission, 0 when returning to a cached page). Volume figures in `backend-plan.md` §6 |
 | On Hold / Cancelled / Archived / Reopen / Delete | ✅ (2026-10-23) Hold/Resume (back to the exact previous status), Cancel, Archive/Unarchive, Reopen (→ Apply Feedback, approved round kept), and Delete for packages never started; editor notified, every change in the activity history, optional reason or note. Managers only. Migrations `20261023100000_…` and `20261023100100_…`, not yet on `cne-dev` |
 | Attendance corrections + audit | ⏸ Deferred after v1. The Attendance page tells people to ask their manager |

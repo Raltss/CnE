@@ -1,115 +1,193 @@
 @import 'tailwindcss';
 
-/* Semantic tokens: see design-system/cne/MASTER.md. Components use the
-   Tailwind utilities generated from @theme below, never raw hex. */
+/* Semantic tokens: see design-system/cne/MASTER.md ("Playhead"). Components use the
+   Tailwind utilities generated from @theme below, never raw color values.
+   Every text and control pair is AA in both themes (MASTER.md lists the ratios). */
 :root {
-  --cne-primary: #b4471f;
-  --cne-primary-hover: #953a18;
-  --cne-on-primary: #ffffff;
-  --cne-accent: #a15c07;
-  --cne-on-accent: #ffffff;
-  --cne-bg: #faf6f1;
-  --cne-surface: #fffdfa;
-  --cne-surface-2: #f3ece3;
-  --cne-fg: #2a211b;
-  --cne-muted-fg: #6e5f53;
-  --cne-border: #e7ddd1;
-  --cne-border-strong: #a08f80;
-  --cne-ring: #b4471f;
-  --cne-danger: #b42318;
-  --cne-danger-bg: #fde4e1;
-  --cne-success: #2b7330;
-  --cne-success-bg: #e1f3dc;
-  --cne-warning: #975106;
-  --cne-warning-bg: #fcefd4;
-  --cne-info: #1d4ed8;
-  --cne-info-bg: #dbeafe;
+  /* Neutrals: suite grey canvas, monitor-white surfaces, ink text (one cool hue, 262). */
+  --cne-bg: oklch(0.982 0.003 262);
+  --cne-surface: oklch(1 0 0);
+  --cne-surface-2: oklch(0.966 0.004 262);
+  --cne-fg: oklch(0.21 0.012 262);
+  --cne-muted-fg: oklch(0.46 0.012 262);
+  --cne-border: oklch(0.918 0.005 262);
+  --cne-border-strong: oklch(0.64 0.01 262);
 
-  --cne-st-assigned: #5c4f45;
-  --cne-st-assigned-bg: #f1ebe4;
-  --cne-st-progress: #1d4ed8;
-  --cne-st-progress-bg: #dbeafe;
-  --cne-st-submitted: #6d28d9;
-  --cne-st-submitted-bg: #ede9fe;
-  --cne-st-feedback: #b13c0a;
-  --cne-st-feedback-bg: #feeadb;
-  --cne-st-completed: #2b7330;
-  --cne-st-completed-bg: #e1f3dc;
-  --cne-st-hold: #975106;
-  --cne-st-hold-bg: #fcefd4;
-  --cne-st-closed: #6b5f56;
-  --cne-st-closed-bg: #f0ebe5;
-  --cne-st-client: #0e6a80;
-  --cne-st-client-bg: #d9f2f7;
+  /* One action color: ink. Primary buttons, selection, focus. */
+  --cne-primary: oklch(0.21 0.012 262);
+  --cne-primary-hover: oklch(0.31 0.012 262);
+  --cne-on-primary: oklch(0.99 0 0);
+  --cne-ring: oklch(0.21 0.012 262);
 
-  /* Chart series (Reports), validated with the dataviz palette checks for each surface. */
+  /* The playhead: only for now and late. */
+  --cne-now: oklch(0.555 0.2 32);
+  --cne-on-now: oklch(0.99 0 0);
+
+  /* Bay graphite: the sidebar and top bar, the one full color field. */
+  --cne-chrome: oklch(0.205 0.008 262);
+  --cne-chrome-2: oklch(0.255 0.009 262);
+  --cne-chrome-3: oklch(0.3 0.01 262);
+  --cne-chrome-fg: oklch(0.84 0.006 262);
+  --cne-chrome-strong: oklch(0.97 0.003 262);
+  --cne-chrome-muted: oklch(0.7 0.008 262);
+  --cne-chrome-line: oklch(1 0 0 / 0.08);
+
+  --cne-accent: oklch(0.555 0.2 32);
+  --cne-on-accent: oklch(0.99 0 0);
+  /* On the clock: the presence dot on the bay (bright enough for 3:1 on graphite). */
+  --cne-live: oklch(0.76 0.16 150);
+
+  /* Interface motion: hover and press. Reduced motion: transitions and animations finish at once. */
+  --cne-dur-1: 120ms;
+  --cne-instant: 0.01ms;
+  --cne-danger: oklch(0.53 0.19 27);
+  --cne-danger-bg: oklch(0.96 0.03 27);
+  --cne-success: oklch(0.5 0.12 150);
+  --cne-success-bg: oklch(0.96 0.035 150);
+  --cne-warning: oklch(0.52 0.11 70);
+  --cne-warning-bg: oklch(0.965 0.04 80);
+  --cne-info: oklch(0.5 0.13 255);
+  --cne-info-bg: oklch(0.96 0.025 255);
+
+  /* Statuses: quiet tinted pills at one lightness, always with an icon and a label. */
+  --cne-st-assigned: oklch(0.45 0.01 262);
+  --cne-st-assigned-bg: oklch(0.95 0.004 262);
+  --cne-st-progress: oklch(0.48 0.14 255);
+  --cne-st-progress-bg: oklch(0.955 0.025 255);
+  --cne-st-submitted: oklch(0.48 0.16 295);
+  --cne-st-submitted-bg: oklch(0.955 0.03 295);
+  --cne-st-client: oklch(0.47 0.08 210);
+  --cne-st-client-bg: oklch(0.955 0.025 210);
+  --cne-st-feedback: oklch(0.5 0.13 50);
+  --cne-st-feedback-bg: oklch(0.96 0.035 55);
+  --cne-st-completed: oklch(0.47 0.11 150);
+  --cne-st-completed-bg: oklch(0.955 0.03 150);
+  --cne-st-hold: oklch(0.5 0.1 85);
+  --cne-st-hold-bg: oklch(0.96 0.045 92);
+  --cne-st-closed: oklch(0.47 0.008 262);
+  --cne-st-closed-bg: oklch(0.95 0.004 262);
+  --cne-st-overdue: oklch(0.53 0.2 30);
+  --cne-st-overdue-bg: oklch(0.955 0.03 30);
+
+  /* Chart series (Reports), validated with the dataviz palette checks on white and on the dark surface. */
   --cne-chart-1: #2a78d6;
   --cne-chart-2: #eb6834;
-  --cne-st-overdue: #b42318;
-  --cne-st-overdue-bg: #fde4e1;
 
   color-scheme: light;
 }
 
 /* data-theme is set before the first paint (index.html) and by src/lib/theme.ts:
-   the person's choice, or the device setting when they haven't chosen. */
+   the person's choice, or the device setting when they haven't chosen.
+   Dark is its own palette: surfaces rise in lightness, the bay sits darker than the canvas. */
 :root[data-theme='dark'] {
-  --cne-primary: #f0956b;
-  --cne-primary-hover: #f5ad8b;
-  --cne-on-primary: #2b1208;
-  --cne-accent: #f5b94a;
-  --cne-on-accent: #2e1d05;
-  --cne-bg: #1a1512;
-  --cne-surface: #221c18;
-  --cne-surface-2: #2d2520;
-  --cne-fg: #f4ece3;
-  --cne-muted-fg: #b8a796;
-  --cne-border: #3a3029;
-  --cne-border-strong: #7a6858;
-  --cne-ring: #f0956b;
-  --cne-danger: #f58a7c;
-  --cne-danger-bg: rgb(127 29 29 / 0.35);
-  --cne-success: #7fcf83;
-  --cne-success-bg: rgb(20 83 45 / 0.4);
-  --cne-warning: #f2c063;
-  --cne-warning-bg: rgb(120 53 15 / 0.4);
-  --cne-info: #93b8ec;
-  --cne-info-bg: rgb(30 58 138 / 0.4);
+  --cne-bg: oklch(0.165 0.006 262);
+  --cne-surface: oklch(0.2 0.007 262);
+  --cne-surface-2: oklch(0.235 0.008 262);
+  --cne-fg: oklch(0.955 0.004 262);
+  --cne-muted-fg: oklch(0.74 0.008 262);
+  --cne-border: oklch(1 0 0 / 0.09);
+  --cne-border-strong: oklch(0.54 0.01 262);
 
-  --cne-st-assigned: #ddd2c8;
-  --cne-st-assigned-bg: rgb(87 76 68 / 0.5);
-  --cne-st-progress: #93c5fd;
-  --cne-st-progress-bg: rgb(30 58 138 / 0.45);
-  --cne-st-submitted: #c4b5fd;
-  --cne-st-submitted-bg: rgb(76 29 149 / 0.45);
-  --cne-st-feedback: #fdba74;
-  --cne-st-feedback-bg: rgb(124 45 18 / 0.45);
-  --cne-st-completed: #86efac;
-  --cne-st-completed-bg: rgb(20 83 45 / 0.45);
-  --cne-st-hold: #fcd34d;
-  --cne-st-hold-bg: rgb(120 53 15 / 0.45);
-  --cne-st-closed: #d3c9bf;
-  --cne-st-closed-bg: rgb(68 60 54 / 0.5);
-  --cne-st-client: #7dd3e8;
-  --cne-st-client-bg: rgb(22 78 99 / 0.45);
+  --cne-primary: oklch(0.95 0.004 262);
+  --cne-primary-hover: oklch(0.86 0.005 262);
+  --cne-on-primary: oklch(0.18 0.01 262);
+  --cne-ring: oklch(0.95 0.004 262);
+
+  --cne-now: oklch(0.68 0.18 32);
+  --cne-on-now: oklch(0.18 0.01 262);
+
+  --cne-chrome: oklch(0.13 0.006 262);
+  --cne-chrome-2: oklch(0.19 0.008 262);
+  --cne-chrome-3: oklch(0.235 0.009 262);
+  --cne-chrome-fg: oklch(0.82 0.006 262);
+  --cne-chrome-strong: oklch(0.97 0.003 262);
+  --cne-chrome-muted: oklch(0.66 0.008 262);
+  --cne-chrome-line: oklch(1 0 0 / 0.07);
+
+  --cne-accent: oklch(0.68 0.18 32);
+  --cne-on-accent: oklch(0.18 0.01 262);
+  --cne-danger: oklch(0.72 0.15 27);
+  --cne-danger-bg: oklch(0.27 0.06 27);
+  --cne-success: oklch(0.76 0.13 150);
+  --cne-success-bg: oklch(0.26 0.04 150);
+  --cne-warning: oklch(0.8 0.12 80);
+  --cne-warning-bg: oklch(0.27 0.045 80);
+  --cne-info: oklch(0.76 0.1 255);
+  --cne-info-bg: oklch(0.26 0.04 255);
+
+  --cne-st-assigned: oklch(0.8 0.01 262);
+  --cne-st-assigned-bg: oklch(0.27 0.008 262);
+  --cne-st-progress: oklch(0.79 0.1 255);
+  --cne-st-progress-bg: oklch(0.27 0.045 255);
+  --cne-st-submitted: oklch(0.8 0.11 295);
+  --cne-st-submitted-bg: oklch(0.27 0.05 295);
+  --cne-st-client: oklch(0.8 0.08 210);
+  --cne-st-client-bg: oklch(0.27 0.035 210);
+  --cne-st-feedback: oklch(0.8 0.11 55);
+  --cne-st-feedback-bg: oklch(0.28 0.045 50);
+  --cne-st-completed: oklch(0.8 0.12 150);
+  --cne-st-completed-bg: oklch(0.27 0.04 150);
+  --cne-st-hold: oklch(0.84 0.11 88);
+  --cne-st-hold-bg: oklch(0.28 0.045 85);
+  --cne-st-closed: oklch(0.78 0.008 262);
+  --cne-st-closed-bg: oklch(0.27 0.006 262);
+  --cne-st-overdue: oklch(0.76 0.14 28);
+  --cne-st-overdue-bg: oklch(0.28 0.06 28);
 
   --cne-chart-1: #3987e5;
   --cne-chart-2: #d95926;
-  --cne-st-overdue: #fca5a5;
-  --cne-st-overdue-bg: rgb(127 29 29 / 0.45);
 
   color-scheme: dark;
 }
 
-@theme inline {
-  --font-sans: 'Nunito Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Fraunces', ui-serif, Georgia, serif;
+@theme {
+  --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
+  /* Type: nothing people read under 13px. 15px is the UI and table-cell size. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-ui: 0.9375rem;
+  --text-ui--line-height: 1.375rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.625rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 1.875rem;
+  --text-3xl: 1.75rem;
+  --text-3xl--line-height: 2.125rem;
+
+  /* Radius family: small parts, controls, cards and tables, dialogs and menus. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Motion: 120ms hover and press, 180ms toggles and tabs, 240ms dialogs and toasts. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-move: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@theme inline {
   /* Full-page loader: shows only if loading takes long enough to notice. */
-  --animate-fade-in-late: fade-in 200ms ease-out 300ms both;
+  --animate-fade-in-late: fade-in 240ms cubic-bezier(0.23, 1, 0.32, 1) 300ms both;
+  --animate-fade-in: fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  --animate-rise-in: rise-in 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
   @keyframes fade-in {
     from {
       opacity: 0;
+    }
+  }
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
     }
   }
 
@@ -118,6 +196,9 @@
   --color-on-primary: var(--cne-on-primary);
   --color-accent: var(--cne-accent);
   --color-on-accent: var(--cne-on-accent);
+  --color-now: var(--cne-now);
+  --color-live: var(--cne-live);
+  --color-on-now: var(--cne-on-now);
   --color-bg: var(--cne-bg);
   --color-surface: var(--cne-surface);
   --color-surface-2: var(--cne-surface-2);
@@ -126,6 +207,13 @@
   --color-border: var(--cne-border);
   --color-border-strong: var(--cne-border-strong);
   --color-ring: var(--cne-ring);
+  --color-chrome: var(--cne-chrome);
+  --color-chrome-2: var(--cne-chrome-2);
+  --color-chrome-3: var(--cne-chrome-3);
+  --color-chrome-fg: var(--cne-chrome-fg);
+  --color-chrome-strong: var(--cne-chrome-strong);
+  --color-chrome-muted: var(--cne-chrome-muted);
+  --color-chrome-line: var(--cne-chrome-line);
   --color-danger: var(--cne-danger);
   --color-danger-bg: var(--cne-danger-bg);
   --color-success: var(--cne-success);
@@ -160,10 +248,12 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
-    @apply bg-bg font-sans text-fg antialiased;
+    @apply bg-bg font-sans text-fg;
     margin: 0;
     line-height: 1.5;
   }
@@ -172,16 +262,45 @@
   h2,
   h3 {
     line-height: 1.25;
+    text-wrap: balance;
   }
 
-  /* Page titles use the display face; everything else stays in the UI face. */
   h1 {
-    font-family: var(--font-display);
+    letter-spacing: -0.025em;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Codes and rounds (PKG-1042 · R2) and the display clocks: the data voice. Inline times,
+     durations and counts stay in Geist with tabular figures, so punctuation keeps its width. */
+  .font-mono {
+    letter-spacing: -0.01em;
   }
 
   :focus-visible {
     outline: 2px solid var(--cne-ring);
     outline-offset: 2px;
+  }
+
+  ::selection {
+    background: oklch(0.55 0.2 32 / 0.18);
+  }
+
+  a {
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: from-font;
+  }
+
+  /* One chevron for every select, inset like the text on the left. */
+  select:not([multiple]) {
+    appearance: none;
+    padding-right: calc(var(--spacing) * 10);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237b7f89' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right calc(var(--spacing) * 3.5) center;
+    background-size: calc(var(--spacing) * 4);
   }
 
   button:not(:disabled),
@@ -192,13 +311,37 @@
     cursor: pointer;
   }
 
-  /* Raw values: older browsers don't pass custom properties to ::backdrop. */
+  /* Every control answers hover and focus in the same 120ms; components may name their own properties. */
+  a[href],
+  button,
+  summary {
+    transition-property: color, background-color, border-color, text-decoration-color, box-shadow;
+    transition-duration: var(--cne-dur-1);
+    transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  /* Column headers read as labels, not bold. */
+  th {
+    font-weight: 500;
+  }
+
+  /* Raw values: older browsers don't pass custom properties to ::backdrop. The ink at 45%. */
   dialog::backdrop {
-    background: rgb(42 33 27 / 0.55);
+    background: rgb(20 22 28 / 0.45);
   }
 
   :root[data-theme='dark'] dialog::backdrop {
-    background: rgb(10 7 5 / 0.65);
+    background: rgb(4 5 8 / 0.62);
+  }
+}
+
+@layer components {
+  /* The bay: sidebar, top bar and phone tab bar. Focus rings turn light on it. */
+  .chrome {
+    --cne-ring: var(--cne-chrome-strong);
+    background-color: var(--cne-chrome);
+    color: var(--cne-chrome-fg);
+    color-scheme: dark;
   }
 }
 
@@ -206,7 +349,7 @@
   *,
   *::before,
   *::after {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
+    transition-duration: var(--cne-instant) !important;
+    animation-duration: var(--cne-instant) !important;
   }
 }

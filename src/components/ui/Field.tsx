@@ -14,7 +14,7 @@ interface FieldProps {
 export function Field({ id, label, required, hint, error, children, className }: FieldProps) {
   return (
     <div className={className}>
-      <label htmlFor={id} className="mb-1 flex items-baseline gap-2 text-sm font-medium text-fg">
+      <label htmlFor={id} className="mb-1.5 flex items-baseline gap-2 text-sm font-medium text-fg">
         {label}
         {required ? (
           <span className="text-xs font-normal text-muted-fg">Required</span>
@@ -24,12 +24,12 @@ export function Field({ id, label, required, hint, error, children, className }:
       </label>
       {children}
       {hint && (
-        <p id={`${id}-hint`} className="mt-1 text-xs text-muted-fg">
+        <p id={`${id}-hint`} className="mt-1.5 text-sm text-muted-fg">
           {hint}
         </p>
       )}
       {error && (
-        <p id={`${id}-error`} className="mt-1 text-sm font-medium text-danger">
+        <p id={`${id}-error`} className="mt-1.5 text-sm font-medium text-danger">
           {error}
         </p>
       )}

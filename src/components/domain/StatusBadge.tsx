@@ -4,14 +4,15 @@ import type { PackageStatus, Role, StaffAccount, SubmissionOutcome } from '../..
 import { ACCESS_META, OUTCOME_META, ROLE_META, STATUS_META, type StatusMeta } from '../../lib/status'
 import { cx } from '../../lib/styles'
 
-const badge = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap'
+// A quiet tinted pill: the icon and the word carry the status, the tint only groups it.
+const badge = 'inline-flex h-6 items-center gap-1.5 rounded-full pr-2.5 pl-2 text-sm font-medium whitespace-nowrap'
 
 /** Always icon + label, never color alone. */
 function MetaBadge({ meta }: { meta: StatusMeta }) {
   const Icon = meta.icon
   return (
     <span className={cx(badge, meta.className)}>
-      <Icon aria-hidden className="size-3.5" strokeWidth={2.5} />
+      <Icon aria-hidden className="size-3.5" strokeWidth={2.25} />
       {meta.label}
     </span>
   )
@@ -31,16 +32,17 @@ export function RoleBadge({ role }: { role: Role | null }) {
   const Icon = meta?.icon
   return (
     <span className={cx(badge, 'bg-surface-2 text-fg')}>
-      {Icon && <Icon aria-hidden className="size-3.5" strokeWidth={2.5} />}
+      {Icon && <Icon aria-hidden className="size-3.5" strokeWidth={2.25} />}
       {meta?.label ?? 'No role'}
     </span>
   )
 }
 
+/** Late is the one status that takes the playhead color at full strength. */
 export function OverdueBadge() {
   return (
-    <span className={cx(badge, 'bg-st-overdue-bg text-st-overdue')}>
-      <TriangleAlert aria-hidden className="size-3.5" strokeWidth={2.5} />
+    <span className={cx(badge, 'bg-now text-on-now')}>
+      <TriangleAlert aria-hidden className="size-3.5" strokeWidth={2.25} />
       Overdue
     </span>
   )

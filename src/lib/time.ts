@@ -29,9 +29,8 @@ const timeFmt = new Intl.DateTimeFormat('en-PH', {
 })
 const clockFmt = new Intl.DateTimeFormat('en-PH', {
   timeZone: MANILA_TZ,
-  hour: '2-digit',
+  hour: 'numeric',
   minute: '2-digit',
-  hour12: false,
 })
 const dateKeyFmt = new Intl.DateTimeFormat('en-CA', {
   timeZone: MANILA_TZ,
@@ -44,7 +43,7 @@ export const formatDateTime = (iso: string) => `${dateTimeFmt.format(new Date(is
 export const formatDate = (iso: string) => dateFmt.format(new Date(iso))
 export const formatShortDate = (iso: string) => shortDateFmt.format(new Date(iso))
 export const formatTime = (iso: string) => timeFmt.format(new Date(iso))
-/** 24h "HH:MM" Manila time, for the clock pill. */
+/** "3:21 PM" Manila time, for the top bar, the playhead flags and the clocks. */
 export const formatClock = (date: Date) => clockFmt.format(date)
 
 /** Manila calendar date as YYYY-MM-DD. */
@@ -61,6 +60,25 @@ export function fromManilaInputValue(value: string): string | null {
   const date = new Date(`${value}:00+08:00`)
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
+
+const dueTimeFmt = new Intl.DateTimeFormat('en-PH', { timeZone: MANILA_TZ, hour: 'numeric', minute: '2-digit' })
+const dueDayFmt = new Intl.DateTimeFormat('en-PH', { timeZone: MANILA_TZ, weekday: 'short', day: 'numeric', month: 'short' })
+const dueYearFmt = new Intl.DateTimeFormat('en-PH', { timeZone: MANILA_TZ, day: 'numeric', month: 'short', year: 'numeric' })
+
+/** A deadline the way people say it: "Today, 6:00 PM", "Tomorrow, 12:00 PM", "Wed, 28 Oct, 5:00 PM" (Manila). */
+export function formatDue(iso: string, now: Date): string {
+  const key = manilaDateKey(iso)
+  const today = manilaDateKey(now.toISOString())
+  const time = dueTimeFmt.format(new Date(iso))
+  if (key === today) return `Today, ${time}`
+  if (key === addDays(today, 1)) return `Tomorrow, ${time}`
+  if (key === addDays(today, -1)) return `Yesterday, ${time}`
+  if (key.slice(0, 4) !== today.slice(0, 4)) return `${dueYearFmt.format(new Date(iso))}, ${time}`
+  return `${dueDayFmt.format(new Date(iso))}, ${time}`
+}
+
+/** formatDue for the middle of a sentence: "due tomorrow, 12:00 PM". */
+export const formatDueInline = (iso: string, now: Date) => formatDue(iso, now).replace(/^(Today|Tomorrow|Yesterday)/, (word) => word.toLowerCase())
 
 export function formatDuration(ms: number): string {
   const totalMinutes = Math.max(0, Math.floor(ms / 60000))

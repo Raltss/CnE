@@ -230,7 +230,7 @@ export function Reports() {
                 {overAllowance.map(({ pkg, client, extra }) => (
                   <li key={pkg.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                     <span className="min-w-0">
-                      <Link to={`/packages/${pkg.id}`} state={linkState} className="font-semibold underline-offset-2 hover:text-primary hover:underline">
+                      <Link to={`/packages/${pkg.id}`} state={linkState} className="font-medium text-fg decoration-border-strong underline-offset-4 hover:underline">
                         {pkg.title}
                       </Link>
                       <span className="block text-xs text-muted-fg tabular-nums">
@@ -246,7 +246,7 @@ export function Reports() {
               </ul>
             ) : (
               <EmptyState icon={CircleCheck} title="Every package stayed within its allowance" compact>
-                Set the included revisions per product in Packages → Products.
+                Set the included revisions per product in Packages, under Products.
               </EmptyState>
             )}
           </Section>

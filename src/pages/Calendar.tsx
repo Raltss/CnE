@@ -11,7 +11,7 @@ import type { PackageSummary, Person } from '../data/types'
 import { backState } from '../lib/back'
 import { STATUS_META } from '../lib/status'
 import { buttonClasses, cardClasses, cx } from '../lib/styles'
-import { addDays, formatDayKey, formatDayRange, formatTime, isDateKey, manilaDateKey, mondayOf } from '../lib/time'
+import { addDays, formatClock, formatDayKey, formatDayRange, formatTime, isDateKey, manilaDateKey, mondayOf } from '../lib/time'
 import { useSession } from '../session/context'
 
 /** An editor with this many active packages due on one day is flagged as a busy day. */
@@ -55,7 +55,7 @@ export function Calendar() {
       description="Deadlines per editor for the week, in Manila time (PHT). Busy days and overdue work stand out."
       actions={
         me.role === 'manager' && (
-          <div className="flex gap-1 rounded-lg border border-border bg-surface p-1" role="group" aria-label="Whose packages">
+          <div className="flex gap-1 rounded-lg bg-surface-2 p-1" role="group" aria-label="Whose packages">
             {(['all', 'mine'] as const).map((value) => (
               <button
                 key={value}
@@ -68,8 +68,8 @@ export function Calendar() {
                   setParams(next, { replace: true })
                 }}
                 className={cx(
-                  'min-h-10 rounded-md px-4 text-sm font-semibold transition-colors duration-150',
-                  scope === value ? 'bg-primary text-on-primary' : 'text-muted-fg hover:bg-surface-2 hover:text-fg',
+                  'min-h-9 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-[background-color,color,box-shadow] duration-180 ease-out',
+                  scope === value ? 'bg-surface text-fg shadow-xs ring-1 ring-border' : 'text-muted-fg hover:text-fg',
                 )}
               >
                 {value === 'all' ? 'All packages' : 'I’m responsible'}
@@ -140,13 +140,13 @@ export function Calendar() {
         <div className={cx(cardClasses, 'overflow-x-auto')}>
           <table className="w-full min-w-[56rem] table-fixed border-collapse text-left text-sm">
             <caption className="sr-only">Deadlines per editor, {formatDayRange(days[0], days[6])}</caption>
-            <thead className="bg-surface-2 text-xs font-semibold text-muted-fg">
+            <thead className="bg-surface-2 text-sm font-medium text-muted-fg">
               <tr>
                 <th scope="col" className="w-40 px-3 py-2">
                   Editor
                 </th>
                 {earlier.length > 0 && (
-                  <th scope="col" className="w-36 px-2 py-2 text-danger">
+                  <th scope="col" className="w-36 px-2 py-2 text-now">
                     <span className="inline-flex items-center gap-1">
                       <TriangleAlert aria-hidden className="size-3.5" />
                       Overdue
@@ -159,12 +159,24 @@ export function Calendar() {
                     key={day}
                     scope="col"
                     aria-current={day === today ? 'date' : undefined}
-                    className={cx('px-2 py-2', day === today && 'bg-primary/10 text-primary')}
+                    className={cx('px-2 py-2', day === today && 'bg-surface text-fg')}
                   >
-                    <span className="block">{formatDayKey(day)}</span>
-                    <span className="block font-normal tabular-nums">
-                      {day === today ? 'Today · ' : ''}
-                      {due.filter((p) => dayOf(p) === day).length} due
+                    <span className="flex items-center gap-1.5">
+                      {day === today && (
+                        <svg aria-hidden viewBox="0 0 10 14" className="h-3.5 w-2.5 shrink-0 fill-now">
+                          <rect x="0" y="0" width="10" height="5" rx="1.5" />
+                          <rect x="4" y="3" width="2" height="11" rx="1" />
+                        </svg>
+                      )}
+                      {formatDayKey(day)}
+                    </span>
+                    <span className="block font-normal">
+                      {day === today ? (
+                        <>
+                          Today · <span className="tabular-nums">{formatClock(now)}</span> ·{' '}
+                        </>
+                      ) : null}
+                      <span className="tabular-nums">{due.filter((p) => dayOf(p) === day).length}</span> due
                     </span>
                   </th>
                 ))}
@@ -176,13 +188,13 @@ export function Calendar() {
                 return (
                   <tr key={person.id} className="border-t border-border align-top">
                     <th scope="row" className="px-3 py-2 font-normal">
-                      <span className="block truncate font-semibold">{person.name}</span>
-                      <span className="block text-xs text-muted-fg tabular-nums">
+                      <span className="block truncate font-medium">{person.name}</span>
+                      <span className="block text-sm text-muted-fg">
                         {mine} due this week{!person.isActive && ' · deactivated'}
                       </span>
                     </th>
                     {earlier.length > 0 && (
-                      <td className="border-l border-border bg-danger-bg/40 px-1.5 py-1.5">
+                      <td className="border-l border-border bg-st-overdue-bg/50 px-1.5 py-1.5">
                         <Chips packages={cell(person.id, 'earlier')} lookup={lookup} now={now} linkState={linkState} showDate />
                       </td>
                     )}
@@ -192,10 +204,10 @@ export function Calendar() {
                       return (
                         <td
                           key={day}
-                          className={cx('border-l border-border px-1.5 py-1.5', busy ? 'bg-warning-bg/60' : day === today && 'bg-primary/5')}
+                          className={cx('border-l border-border px-1.5 py-1.5', busy ? 'bg-warning-bg/60' : day === today && 'bg-surface-2/60')}
                         >
                           {busy && (
-                            <p className="mb-1 inline-flex items-center gap-1 text-xs font-semibold text-warning">
+                            <p className="mb-1 inline-flex items-center gap-1 text-xs font-medium text-warning">
                               <TriangleAlert aria-hidden className="size-3.5" />
                               Busy day
                             </p>
@@ -257,8 +269,8 @@ function Chips({
               to={`/packages/${pkg.id}`}
               state={linkState}
               className={cx(
-                'block rounded-md border bg-surface px-2 py-1.5 transition-colors duration-150 hover:bg-surface-2',
-                overdue ? 'border-danger/60' : 'border-border-strong',
+                'block rounded-md border bg-surface px-2 py-1.5 transition-colors duration-120 hover:border-border-strong hover:bg-surface-2',
+                overdue ? 'border-now/60' : 'border-border',
                 // With the client or on hold: not the editor's work right now.
                 waiting && 'border-dashed',
               )}
@@ -268,15 +280,15 @@ function Chips({
                   <Icon aria-hidden className="size-3" strokeWidth={2.5} />
                 </span>
                 <span className="min-w-0">
-                  <span className={cx('line-clamp-2 text-xs font-semibold break-words', waiting && 'text-muted-fg')}>{pkg.title}</span>
-                  <span className="block text-[11px] text-muted-fg tabular-nums">
+                  <span className={cx('line-clamp-2 text-xs font-medium break-words', waiting && 'text-muted-fg')}>{pkg.title}</span>
+                  <span className="block text-xs text-muted-fg">
                     {showDate ? formatDayKey(manilaDateKey(pkg.deadline)) : formatTime(pkg.deadline)}
                     {showEditor && ` · ${lookup.personName(pkg.editorId)}`}
                     {' · '}
                     {meta.label}
                   </span>
                   {overdue && (
-                    <span className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-danger">
+                    <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-now">
                       <TriangleAlert aria-hidden className="size-3" />
                       Overdue
                     </span>
@@ -320,16 +332,16 @@ function AgendaByDay({
           group.packages.filter(isActive).filter((p, _, all) => all.filter((o) => o.editorId === p.editorId).length >= BUSY_DAY).map((p) => p.editorId),
         )
         return (
-          <li key={group.key} className={cx(cardClasses, 'p-3', group.today && 'border-primary/50')}>
+          <li key={group.key} className={cx(cardClasses, 'p-4')}>
             <h3 className="flex flex-wrap items-center justify-between gap-2 text-sm font-semibold">
-              <span aria-current={group.today ? 'date' : undefined} className={cx(group.key === 'earlier' && 'text-danger')}>
+              <span aria-current={group.today ? 'date' : undefined} className={cx(group.key === 'earlier' && 'text-now')}>
                 {group.title}
-                {group.today && <span className="ml-2 text-xs font-normal text-primary">Today</span>}
+                {group.today && <span className="ml-2 text-xs font-medium text-now">Today · {formatClock(now)}</span>}
               </span>
               <span className="text-xs font-normal text-muted-fg tabular-nums">{group.packages.length} due</span>
             </h3>
             {busyEditors.size > 0 && (
-              <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-warning">
+              <p className="mt-1 flex items-center gap-1 text-xs font-medium text-warning">
                 <TriangleAlert aria-hidden className="size-3.5" />
                 Busy day for {[...busyEditors].map((id) => lookup.personName(id)).join(', ')}
               </p>
@@ -356,7 +368,7 @@ function Legend() {
         Busy day: {BUSY_DAY} or more active packages due for one editor
       </span>
       <span className="inline-flex items-center gap-1">
-        <TriangleAlert aria-hidden className="size-3.5 text-danger" />
+        <TriangleAlert aria-hidden className="size-3.5 text-now" />
         Overdue
       </span>
       <span>Dashed outline: with the client or on hold (not counted as workload)</span>

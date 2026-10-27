@@ -19,7 +19,7 @@ interface TabNavProps {
 /** Page-level tabs as links (`?tab=…`). Switching tabs clears that tab's filters. */
 export function TabNav({ tabs, current, label, param = 'tab' }: TabNavProps) {
   return (
-    <nav aria-label={label} className="mb-4 flex gap-1 overflow-x-auto border-b border-border">
+    <nav aria-label={label} className="mb-5 flex gap-4 overflow-x-auto border-b border-border">
       {tabs.map((tab) => {
         const active = tab.id === current
         return (
@@ -28,13 +28,13 @@ export function TabNav({ tabs, current, label, param = 'tab' }: TabNavProps) {
             to={`?${param}=${tab.id}`}
             aria-current={active ? 'page' : undefined}
             className={cx(
-              '-mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-semibold whitespace-nowrap transition-colors duration-150',
-              active ? 'border-primary text-primary' : 'border-transparent text-muted-fg hover:text-fg',
+              '-mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-0.5 text-ui font-medium whitespace-nowrap transition-colors duration-180',
+              active ? 'border-fg text-fg' : 'border-transparent text-muted-fg hover:border-border-strong/50 hover:text-fg',
             )}
           >
             {tab.label}
             {tab.count !== undefined && (
-              <span className={cx('rounded-full px-1.5 text-xs leading-5 tabular-nums', active ? 'bg-primary/10' : 'bg-surface-2')}>
+              <span className={cx('text-sm tabular-nums', active ? 'text-fg' : 'text-muted-fg')}>
                 {tab.count}
               </span>
             )}

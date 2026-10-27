@@ -1,7 +1,8 @@
-import { Bell, Clapperboard, Ellipsis, LogOut, UserRound } from 'lucide-react'
+import { Bell, Ellipsis, LogOut } from 'lucide-react'
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { ClockPill } from '../components/domain/ClockControls'
+import { BrandMark } from '../components/ui/BrandMark'
 import { Dialog } from '../components/ui/Dialog'
 import { PageStatus } from '../components/ui/PageStatus'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
@@ -10,7 +11,9 @@ import { useNow } from '../data/hooks'
 import { useAccounts, useActiveWork, useUnreadCount } from '../data/queries'
 import { accessOf, isOverdue } from '../data/selectors'
 import type { PackageSummary, Person } from '../data/types'
+import { initials } from '../lib/initials'
 import { cx } from '../lib/styles'
+import { formatClock, formatDayKey, manilaDateKey } from '../lib/time'
 import { useSession } from '../session/context'
 import { HOME, MOBILE_TAB_LIMIT, NAV, type NavItem } from './nav'
 
@@ -46,12 +49,27 @@ function useBadgeCounts(me: Person, now: Date): BadgeCounts {
 
 const badgeCount = (item: NavItem, counts: BadgeCounts) => (item.badge ? counts[item.badge] : 0)
 
-function CountBadge({ count, label, className }: { count: number; label: string; className?: string }) {
+const BADGE_LABEL = {
+  notifications: 'unread',
+  review: 'awaiting review',
+  changes: 'need changes',
+  overdue: 'overdue',
+  pending: 'waiting for approval',
+} as const
+
+/**
+ * A count beside a nav item. Quiet mono figures, except late work, which takes the playhead color.
+ * `chip` is the small bubble used where there's no room for the label (icon rail, phone tabs).
+ */
+function CountBadge({ count, label, late, chip, className }: { count: number; label: string; late?: boolean; chip?: boolean; className?: string }) {
   if (!count) return null
   return (
     <span
       className={cx(
-        'inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] leading-5 font-bold text-on-accent tabular-nums',
+        'text-xs leading-5 tabular-nums',
+        chip || late
+          ? cx('inline-flex min-w-5 items-center justify-center rounded-full px-1.5 font-medium', late ? 'bg-now text-on-now' : 'bg-chrome-strong text-chrome')
+          : 'text-chrome-muted',
         className,
       )}
     >
@@ -60,14 +78,6 @@ function CountBadge({ count, label, className }: { count: number; label: string;
     </span>
   )
 }
-
-const BADGE_LABEL = {
-  notifications: 'unread',
-  review: 'awaiting review',
-  changes: 'need changes',
-  overdue: 'overdue',
-  pending: 'waiting for approval',
-} as const
 
 export function AppShell() {
   const { me, signOut } = useSession()
@@ -98,111 +108,105 @@ export function AppShell() {
         Skip to content
       </a>
       <div className="flex flex-1">
-        {/* Sidebar: icon rail on tablet, full on desktop */}
-        <nav
-          aria-label="Main"
-          className="sticky top-0 hidden h-dvh w-16 shrink-0 flex-col border-r border-border bg-surface md:flex lg:w-60"
-        >
-          <Link to={HOME[me.role]} className="flex h-14 items-center gap-2 border-b border-border px-4 font-bold">
-            <span className="flex size-8 items-center justify-center rounded-md bg-primary text-on-primary">
-              <Clapperboard aria-hidden className="size-4" />
-            </span>
-            <span className="hidden font-display text-lg lg:inline">CnE</span>
-            <span className="sr-only lg:hidden">CnE home</span>
-          </Link>
-          <ul className="flex flex-1 flex-col gap-1 p-2">
-            {items.map((item) => {
-              const Icon = item.icon
-              const count = badgeCount(item, counts)
-              return (
-                <li key={item.to}>
-                  <NavLink
-                    to={item.to}
-                    title={item.label}
-                    className={({ isActive }) =>
-                      cx(
-                        'relative flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors duration-150',
-                        isActive ? 'bg-primary/10 text-primary' : 'text-muted-fg hover:bg-surface-2 hover:text-fg',
-                      )
-                    }
-                  >
-                    <Icon aria-hidden className="size-4 shrink-0" />
-                    <span className="sr-only lg:not-sr-only lg:flex-1">{item.label}</span>
-                    {item.badge && (
-                      <CountBadge
-                        count={count}
-                        label={BADGE_LABEL[item.badge]}
-                        className="absolute top-0.5 right-0.5 lg:static"
-                      />
-                    )}
-                  </NavLink>
-                </li>
-              )
-            })}
-          </ul>
-          <div className="hidden border-t border-border p-4 lg:block">
-            <p className="truncate text-sm font-semibold">{me.name}</p>
-            <p className="truncate text-xs text-muted-fg">
-              {me.title && `${me.title} · `}
-              <span className="capitalize">{me.role}</span>
-            </p>
-            <NavLink
-              to="/account"
-              className={({ isActive }) =>
-                cx(
-                  'mt-3 inline-flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm font-medium',
-                  isActive ? 'bg-primary/10 text-primary' : 'text-muted-fg hover:bg-surface-2 hover:text-fg',
+        {/* Sidebar in the bay color: icon rail on tablet, full on desktop. The column carries the
+            color the full height of the page; the nav inside stays in view. */}
+        <div className="chrome hidden w-16 shrink-0 md:block lg:w-60">
+          <nav aria-label="Main" className="sticky top-0 flex h-dvh flex-col">
+            <Link to={HOME[me.role]} className="flex h-14 shrink-0 items-center px-5 text-chrome-strong lg:px-4">
+              <BrandMark wordmark={false} className="lg:hidden" />
+              <BrandMark className="hidden lg:inline-flex" />
+              <span className="sr-only">CnE home</span>
+            </Link>
+            <ul className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pt-2">
+              {items.map((item) => {
+                const Icon = item.icon
+                const count = badgeCount(item, counts)
+                return (
+                  <li key={item.to}>
+                    <NavLink
+                      to={item.to}
+                      title={item.label}
+                      className={({ isActive }) =>
+                        cx(
+                          'relative flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors duration-120',
+                          isActive ? 'bg-chrome-3 text-chrome-strong' : 'text-chrome-fg hover:bg-chrome-2 hover:text-chrome-strong',
+                        )
+                      }
+                    >
+                      <Icon aria-hidden className="size-4 shrink-0" />
+                      <span className="sr-only lg:not-sr-only lg:flex-1">{item.label}</span>
+                      {item.badge && (
+                        <>
+                          <CountBadge count={count} label={BADGE_LABEL[item.badge]} late={item.badge === 'overdue'} className="hidden lg:inline-flex" />
+                          <CountBadge count={count} label={BADGE_LABEL[item.badge]} late={item.badge === 'overdue'} chip className="absolute -top-0.5 right-0 lg:hidden" />
+                        </>
+                      )}
+                    </NavLink>
+                  </li>
                 )
-              }
-            >
-              <UserRound aria-hidden className="size-4" />
-              Your account
-            </NavLink>
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="mt-1 inline-flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm font-medium text-muted-fg hover:bg-surface-2 hover:text-fg"
-            >
-              <LogOut aria-hidden className="size-4" />
-              Sign out
-            </button>
-          </div>
-        </nav>
-
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border bg-surface/95 px-4 backdrop-blur">
-            <div className="flex min-w-0 items-center gap-2">
-              <Link to={HOME[me.role]} className="flex items-center gap-2 font-bold md:hidden">
-                <span className="flex size-8 items-center justify-center rounded-md bg-primary text-on-primary">
-                  <Clapperboard aria-hidden className="size-4" />
-                </span>
-                <span className="sr-only">CnE home</span>
-              </Link>
-              {/* The name doubles as the way to the account page (password) on small screens. */}
-              <Link
+              })}
+            </ul>
+            <div className="flex items-center gap-1 border-t border-chrome-line p-2">
+              <NavLink
                 to="/account"
                 title="Your account"
-                className="min-w-0 truncate rounded-md text-sm underline-offset-2 hover:underline"
+                className={({ isActive }) =>
+                  cx(
+                    'flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-md px-3 transition-colors duration-120 lg:px-2',
+                    isActive ? 'bg-chrome-3' : 'hover:bg-chrome-2',
+                  )
+                }
               >
-                <span className="font-semibold">{me.name}</span>
-                <span className="text-muted-fg capitalize"> · {me.role}</span>
-                <span className="sr-only"> (your account)</span>
-              </Link>
+                <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-chrome-3 text-xs font-medium text-chrome-strong">
+                  {initials(me.name)}
+                </span>
+                <span className="hidden min-w-0 flex-col lg:flex">
+                  <span className="truncate text-sm font-medium text-chrome-strong">{me.name}</span>
+                  <span className="truncate text-sm text-chrome-muted">{me.title || <span className="capitalize">{me.role}</span>}</span>
+                </span>
+                <span className="sr-only lg:hidden">Your account</span>
+              </NavLink>
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                aria-label="Sign out"
+                title="Sign out"
+                className="hidden size-10 shrink-0 items-center justify-center rounded-md text-chrome-muted transition-colors duration-120 hover:bg-chrome-2 hover:text-chrome-strong lg:flex"
+              >
+                <LogOut aria-hidden className="size-4" />
+              </button>
             </div>
-            <div className="flex items-center gap-2">
+          </nav>
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="chrome sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-chrome-line px-4 md:px-6">
+            <div className="flex min-w-0 items-center gap-3">
+              <Link to={HOME[me.role]} className="flex items-center text-chrome-strong md:hidden">
+                <BrandMark wordmark={false} />
+                <span className="sr-only">CnE home</span>
+              </Link>
+
+              <p className="hidden text-sm text-chrome-fg md:block">
+                {formatDayKey(manilaDateKey(now.toISOString()))}
+                <span className="ml-2 font-medium text-chrome-strong tabular-nums">{formatClock(now)}</span>
+                <span className="ml-1 text-chrome-muted">PHT</span>
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
               {doesWork && <ClockPill />}
-              <ThemeToggle />
+              <ThemeToggle tone="chrome" className="max-md:hidden" />
               {doesWork && (
                 <Link
                   to="/notifications"
-                  className="relative flex size-10 items-center justify-center rounded-full text-muted-fg hover:bg-surface-2 hover:text-fg"
+                  className="relative flex size-10 items-center justify-center rounded-md text-chrome-fg transition-colors duration-120 hover:bg-chrome-2 hover:text-chrome-strong"
                   aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
                 >
-                  <Bell aria-hidden className="size-5" />
+                  <Bell aria-hidden className="size-4.5" />
                   {unread > 0 && (
                     <span
                       aria-hidden
-                      className="absolute top-0.5 right-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[11px] leading-5 font-bold text-on-accent tabular-nums"
+                      className="absolute top-1 right-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-chrome-strong px-1 text-xs leading-5 font-medium text-chrome tabular-nums"
                     >
                       {unread}
                     </span>
@@ -214,14 +218,25 @@ export function AppShell() {
                 onClick={() => void signOut()}
                 aria-label="Sign out"
                 title="Sign out"
-                className="flex size-10 items-center justify-center rounded-full text-muted-fg hover:bg-surface-2 hover:text-fg lg:hidden"
+                className="hidden size-10 items-center justify-center rounded-md text-chrome-fg transition-colors duration-120 hover:bg-chrome-2 hover:text-chrome-strong md:flex lg:hidden"
               >
-                <LogOut aria-hidden className="size-5" />
+                <LogOut aria-hidden className="size-4.5" />
               </button>
+              {/* Phones: the way to Your account (profile, theme, password, sign out). */}
+              <Link
+                to="/account"
+                title="Your account"
+                className="ml-1 flex size-10 items-center justify-center rounded-full md:hidden"
+              >
+                <span aria-hidden className="flex size-8 items-center justify-center rounded-full bg-chrome-3 text-xs font-medium text-chrome-strong">
+                  {initials(me.name)}
+                </span>
+                <span className="sr-only">Your account ({me.name})</span>
+              </Link>
             </div>
           </header>
 
-          <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[1440px] flex-1 px-4 pt-5 pb-24 md:px-6 md:pb-10">
+          <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl flex-1 px-4 pt-6 pb-10 outline-none md:px-8 md:pt-8 md:pb-12">
             <Suspense fallback={<PageStatus />}>
               <Outlet />
             </Suspense>
@@ -229,18 +244,26 @@ export function AppShell() {
         </div>
       </div>
 
-      {/* Mobile bottom tab bar (≤5 items) */}
-      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface md:hidden">
+      {/* Mobile bottom tab bar (≤5 items), in the bay color like the top bar */}
+      <nav aria-label="Main" className="chrome sticky bottom-0 z-30 border-t border-chrome-line pb-[env(safe-area-inset-bottom)] md:hidden">
         <ul className={cx('grid', MOBILE_GRID[tabs.length + (overflow ? 1 : 0)])}>
           {tabs.map((item) => {
             const Icon = item.icon
             const count = badgeCount(item, counts)
             return (
               <li key={item.to}>
-                <NavLink to={item.to} className={({ isActive }) => cx(mobileTabClasses, isActive ? 'text-primary' : 'text-muted-fg')}>
-                  <Icon aria-hidden className="size-5" />
-                  {item.short}
-                  {item.badge && <CountBadge count={count} label={BADGE_LABEL[item.badge]} className="absolute top-1 right-[18%]" />}
+                <NavLink to={item.to} className={({ isActive }) => cx(mobileTabClasses, isActive ? 'text-chrome-strong' : 'text-chrome-muted')}>
+                  {({ isActive }) => (
+                    <>
+                      <span aria-hidden className={cx('flex h-7 w-12 items-center justify-center rounded-full transition-colors duration-180', isActive && 'bg-chrome-3')}>
+                        <Icon className="size-5" />
+                      </span>
+                      {item.short}
+                      {item.badge && (
+                        <CountBadge count={count} label={BADGE_LABEL[item.badge]} late={item.badge === 'overdue'} chip className="absolute top-1 left-1/2 ml-2" />
+                      )}
+                    </>
+                  )}
                 </NavLink>
               </li>
             )
@@ -259,7 +282,7 @@ export function AppShell() {
 // Full class names so Tailwind generates them.
 const MOBILE_GRID: Record<number, string> = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5' }
 
-const mobileTabClasses = 'relative flex min-h-14 w-full flex-col items-center justify-center gap-0.5 text-[11px] font-semibold'
+const mobileTabClasses = 'relative flex min-h-16 w-full flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors duration-120'
 
 /** Mobile-only overflow menu for nav items that don't fit in the bottom bar. */
 function MoreMenu({ items, counts }: { items: NavItem[]; counts: BadgeCounts }) {
@@ -274,14 +297,16 @@ function MoreMenu({ items, counts }: { items: NavItem[]; counts: BadgeCounts }) 
         type="button"
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
-        className={cx(mobileTabClasses, active ? 'text-primary' : 'text-muted-fg')}
+        className={cx(mobileTabClasses, active ? 'text-chrome-strong' : 'text-chrome-muted')}
       >
-        <Ellipsis aria-hidden className="size-5" />
+        <span aria-hidden className={cx('flex h-7 w-12 items-center justify-center rounded-full', active && 'bg-chrome-3')}>
+          <Ellipsis className="size-5" />
+        </span>
         More
-        <CountBadge count={hiddenCount} label="alerts in more menu" className="absolute top-1 right-[18%]" />
+        <CountBadge count={hiddenCount} label="alerts in more menu" chip className="absolute top-1 left-1/2 ml-2" />
       </button>
       <Dialog open={open} onClose={() => setOpen(false)} title="More">
-        <ul className="-mx-2 flex flex-col gap-1">
+        <ul className="-mx-2 flex flex-col gap-0.5">
           {items.map((item) => {
             const Icon = item.icon
             const count = badgeCount(item, counts)
@@ -292,14 +317,19 @@ function MoreMenu({ items, counts }: { items: NavItem[]; counts: BadgeCounts }) 
                   onClick={() => setOpen(false)}
                   className={({ isActive }) =>
                     cx(
-                      'flex min-h-12 items-center gap-3 rounded-md px-3 text-base font-medium',
-                      isActive ? 'bg-primary/10 text-primary' : 'text-fg hover:bg-surface-2',
+                      'flex min-h-12 items-center gap-3 rounded-md px-3 text-base font-medium transition-colors duration-120',
+                      isActive ? 'bg-surface-2 text-fg' : 'text-fg hover:bg-surface-2',
                     )
                   }
                 >
-                  <Icon aria-hidden className="size-5 shrink-0" />
+                  <Icon aria-hidden className="size-5 shrink-0 text-muted-fg" />
                   <span className="flex-1">{item.label}</span>
-                  {item.badge && <CountBadge count={count} label={BADGE_LABEL[item.badge]} />}
+                  {item.badge && count > 0 && (
+                    <span className={cx('text-sm tabular-nums', item.badge === 'overdue' ? 'font-medium text-now' : 'text-muted-fg')}>
+                      {count}
+                      <span className="sr-only"> {BADGE_LABEL[item.badge]}</span>
+                    </span>
+                  )}
                 </NavLink>
               </li>
             )

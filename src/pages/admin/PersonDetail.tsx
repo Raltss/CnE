@@ -127,7 +127,7 @@ export function PersonDetail() {
     <>
       <Link
         to={`/team?role=${person.role}`}
-        className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+        className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-fg underline decoration-border-strong underline-offset-4 transition-colors duration-120 hover:decoration-fg"
       >
         <ArrowLeft aria-hidden className="size-4" />
         Team
@@ -135,7 +135,7 @@ export function PersonDetail() {
 
       <header className={cx(cardClasses, 'mb-5 flex flex-wrap items-start justify-between gap-3 p-4')}>
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">{person.name}</h1>
+          <h1 className="text-3xl font-semibold">{person.name}</h1>
           <p className="mt-0.5 truncate text-sm text-muted-fg">
             {person.title}
             {account?.email && ` · ${account.email}`}
@@ -144,8 +144,8 @@ export function PersonDetail() {
             <RoleBadge role={person.role} />
             <AccessBadge account={person} />
             {openSession ? (
-              <span className="inline-flex items-center gap-1.5 text-sm tabular-nums">
-                <span aria-hidden className="size-2 rounded-full bg-success" />
+              <span data-seenry-dot="presence" className="inline-flex items-center gap-1.5 text-sm tabular-nums">
+                <span aria-hidden className="size-2 shrink-0 rounded-full bg-success" />
                 Clocked in since {formatTime(openSession.clockIn)} ({formatDuration(sessionDurationMs(openSession, now))})
               </span>
             ) : (

@@ -30,11 +30,11 @@ export function ReviewQueue() {
       aria-pressed={scope === value}
       onClick={() => setParams(value === 'all' ? {} : { scope: value })}
       className={cx(
-        'min-h-9 rounded-md px-3 text-sm font-semibold transition-colors duration-150',
-        scope === value ? 'bg-primary text-on-primary' : 'text-muted-fg hover:bg-surface-2 hover:text-fg',
+        'min-h-9 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-[background-color,color,box-shadow] duration-180 ease-out',
+        scope === value ? 'bg-surface text-fg shadow-xs ring-1 ring-border' : 'text-muted-fg hover:text-fg',
       )}
     >
-      {label} <span className="tabular-nums">({count})</span>
+      {label} <span className="ml-1 font-mono text-muted-fg">{count}</span>
     </button>
   )
 
@@ -49,7 +49,7 @@ export function ReviewQueue() {
         description="Your packages first, then oldest submission first"
         flush
         actions={
-          <div className="flex gap-1" role="group" aria-label="Filter queue">
+          <div className="flex gap-1 rounded-lg bg-surface-2 p-1" role="group" aria-label="Filter queue">
             {tab('all', 'All', all.length)}
             {tab('mine', 'I’m responsible', mineCount)}
           </div>

@@ -40,7 +40,7 @@ export function TimeClock() {
             description="Last 7 days, newest first"
             flush
             actions={
-              <Link to="/attendance" className="text-sm font-semibold text-primary hover:underline">
+              <Link to="/attendance" className="text-sm font-medium text-fg underline decoration-border-strong underline-offset-4 transition-colors duration-120 hover:decoration-fg">
                 Full attendance
               </Link>
             }

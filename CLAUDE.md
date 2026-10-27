@@ -27,8 +27,9 @@ Do not change the approved stack. Label any new dependency or feature not in the
 
 ## UI work
 
-- All UI design and implementation must use the **UI UX Pro Max** skill (`ui-ux-pro-max:ui-ux-pro-max`, plus `ui-ux-pro-max:ui-styling` / `design-system` as needed).
-- The interface proposal is approved (PRD §11). The design system lives in `design-system/cne/MASTER.md`, with page overrides in `design-system/cne/pages/`. Follow it, and don't regenerate it with `--force` without approval.
+- UI design and implementation use the **Seenry** skills (`seenry`, plus `seenry-review` / `seenry-motion` as needed), working inside the existing system. The app was redesigned with Seenry on 2026-10-26 at the user's request ("Playhead", PRD §11); it replaced the UI UX Pro Max system.
+- The design system lives in `design-system/cne/MASTER.md` (brand guidelines, tokens, components), with page overrides in `design-system/cne/pages/`. Follow it; change the identity (palette, type, the playhead device) only with approval.
+- Red (`now`) means now and overdue only; ink is the one action color; codes and rounds are Geist Mono, times and counts Geist with tabular figures.
 - Use semantic color tokens, not raw hex in components. Statuses always show an icon and a label, never color alone. Meet WCAG AA, keep focus visible, and handle loading, empty, error, and success states.
 
 ## Data layer and security

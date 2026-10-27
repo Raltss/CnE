@@ -22,8 +22,8 @@ export function PageStatus({ error, retry, label = 'Loading…' }: { error?: str
       </EmptyState>
     )
   return (
-    <div role="status" className="flex items-center justify-center gap-2 px-4 py-16 text-sm text-muted-fg">
-      <LoaderCircle aria-hidden className="size-4 animate-spin text-primary motion-reduce:animate-none" />
+    <div role="status" className="flex animate-fade-in-late items-center justify-center gap-2 px-4 py-16 text-ui text-muted-fg">
+      <LoaderCircle aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
       {label}
     </div>
   )
@@ -33,7 +33,7 @@ export function PageStatus({ error, retry, label = 'Loading…' }: { error?: str
 export function LoadMore({ shown, total, loading, onMore, noun }: { shown: number; total: number; loading: boolean; onMore: () => void; noun: string }) {
   if (total <= shown) return null
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3 text-sm">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-3 text-sm">
       <span className="text-muted-fg tabular-nums">
         Showing {shown} of {total} {noun}
       </span>

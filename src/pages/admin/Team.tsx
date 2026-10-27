@@ -56,8 +56,8 @@ function columnsFor(role: TeamRole, data: TeamData, now: Date): Column[] {
 function ClockStatus({ open: sessions, person }: { open: AttendanceSession[]; person: Person }) {
   const open = sessions.find((s) => s.personId === person.id)
   return open ? (
-    <span className="inline-flex items-center gap-1.5 text-sm whitespace-nowrap">
-      <span aria-hidden className="size-2 rounded-full bg-success" />
+    <span data-seenry-dot="presence" className="inline-flex items-center gap-1.5 text-sm whitespace-nowrap">
+      <span aria-hidden className="size-2 shrink-0 rounded-full bg-success" />
       In since {formatTime(open.clockIn)}
     </span>
   ) : (
@@ -148,9 +148,9 @@ export function Team() {
                 </thead>
                 <tbody>
                   {shown.map((p) => (
-                    <tr key={p.id} className="border-t border-border transition-colors duration-150 hover:bg-surface-2/60">
+                    <tr key={p.id} className="border-t border-border transition-colors duration-120 hover:bg-surface-2/60">
                       <td className="px-4 py-3">
-                        <Link to={`/team/${p.id}`} className="font-semibold text-fg underline-offset-2 hover:text-primary hover:underline">
+                        <Link to={`/team/${p.id}`} className="font-medium text-fg decoration-border-strong underline-offset-4 hover:underline">
                           {p.name}
                         </Link>
                         <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-fg">
@@ -179,7 +179,7 @@ export function Team() {
                   <li key={p.id} className="flex flex-col gap-2 px-4 py-3">
                     <div className="flex items-start justify-between gap-2">
                       <span className="min-w-0">
-                        <Link to={`/team/${p.id}`} className="font-semibold hover:text-primary hover:underline">
+                        <Link to={`/team/${p.id}`} className="font-medium text-fg decoration-border-strong underline-offset-4 hover:underline">
                           {p.name}
                         </Link>
                         <span className="block text-xs text-muted-fg">{p.title}</span>

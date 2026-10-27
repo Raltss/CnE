@@ -14,7 +14,7 @@ interface FilterSelectProps {
 export function FilterSelect({ id, label, value, onChange, options, all }: FilterSelectProps) {
   return (
     <div className="min-w-0">
-      <label htmlFor={id} className="mb-1 block text-xs font-semibold text-muted-fg">
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-muted-fg">
         {label}
       </label>
       <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={inputClasses()}>

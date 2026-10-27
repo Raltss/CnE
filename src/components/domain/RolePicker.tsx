@@ -27,7 +27,7 @@ export function RolePicker({ value, onChange, current, name = 'staff-role' }: Ro
           <label
             key={role}
             className={cx(
-              'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors duration-150',
+              'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors duration-120',
               value === role ? 'border-primary bg-primary/5' : 'border-border-strong hover:bg-surface-2',
             )}
           >
