@@ -41,7 +41,7 @@ export function Login({ signIn }: { signIn: (email: string, password: string) =>
 
   return (
     <AuthLayout title="Sign in" description="Use the work email and password your admin set up for you.">
-      <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4">
+      <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
         {errors.form && (
           <Callout tone="danger" title="Couldn’t sign in">
             {errors.form}
@@ -68,13 +68,11 @@ export function Login({ signIn }: { signIn: (email: string, password: string) =>
             className={inputClasses(Boolean(errors.password))}
           />
         </Field>
-        <button type="submit" disabled={busy} className={buttonClasses('primary', 'md', 'w-full')}>
-          <LogIn aria-hidden className="size-4" />
+        <button type="submit" disabled={busy} className={buttonClasses('primary', 'md', 'mt-1 min-h-11 w-full')}>
+          <LogIn aria-hidden />
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
-        <p className="text-sm text-muted-fg">
-          No account, or forgot your password? Ask your admin. Accounts are created by the agency, so there’s no sign-up.
-        </p>
+        <p className="text-sm text-muted-fg">No account, or forgot your password? Ask your admin: accounts are created by the agency, so there’s no sign-up.</p>
       </form>
     </AuthLayout>
   )

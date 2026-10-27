@@ -1,4 +1,4 @@
-import { FilterX, Plus, Tags } from 'lucide-react'
+import { FilterX, Plus, SlidersHorizontal, Tags } from 'lucide-react'
 import { useId, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { ProductsDialog } from '../../components/domain/ProductsDialog'
@@ -21,7 +21,7 @@ import {
 import type { PackageStatus } from '../../data/types'
 import { backState } from '../../lib/back'
 import { STATUS_META, WORKFLOW_STATUSES } from '../../lib/status'
-import { buttonClasses, inputClasses } from '../../lib/styles'
+import { buttonClasses, cx, inputClasses } from '../../lib/styles'
 import { useSession } from '../../session/context'
 
 const KEYS = Object.keys(EMPTY_FILTERS) as Array<keyof PackageFilters>
@@ -47,6 +47,7 @@ export function PackagesList() {
   const search = useDebouncedValue(filters.q)
   const uid = useId()
   const activeCount = KEYS.filter((k) => filters[k]).length
+  const [showFilters, setShowFilters] = useState(false)
   const work = useActiveWork()
   const { people, products, lookup, queries } = useDirectory()
 
@@ -61,7 +62,7 @@ export function PackagesList() {
   const status = pageStatus(work, ...queries)
   const select = (key: keyof PackageFilters, label: string, options: Array<{ value: string; label: string }>, all: string) => (
     <div className="min-w-0">
-      <label htmlFor={`${uid}-${key}`} className="mb-1 block text-xs font-semibold text-muted-fg">
+      <label htmlFor={`${uid}-${key}`} className="mb-1.5 block text-sm font-medium text-muted-fg">
         {label}
       </label>
       <select id={`${uid}-${key}`} value={filters[key]} onChange={(e) => set(key, e.target.value)} className={inputClasses()}>
@@ -101,37 +102,53 @@ export function PackagesList() {
 
       <form role="search" aria-label="Filter packages" className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" onSubmit={(e) => e.preventDefault()}>
         <div className="min-w-0 sm:col-span-2 lg:col-span-3 xl:col-span-1">
-          <label htmlFor={`${uid}-q`} className="mb-1 block text-xs font-semibold text-muted-fg">
+          <label htmlFor={`${uid}-q`} className="mb-1.5 block text-sm font-medium text-muted-fg">
             Search
           </label>
-          <input
-            id={`${uid}-q`}
-            type="search"
-            value={filters.q}
-            onChange={(e) => set('q', e.target.value)}
-            placeholder="Title or PKG code"
-            className={inputClasses()}
-          />
+          <div className="flex gap-2">
+            <input
+              id={`${uid}-q`}
+              type="search"
+              value={filters.q}
+              onChange={(e) => set('q', e.target.value)}
+              placeholder="Title or PKG code"
+              className={inputClasses()}
+            />
+            {/* Phones: the other filters fold away behind this button. */}
+            <button
+              type="button"
+              aria-expanded={showFilters}
+              aria-controls={`${uid}-filters`}
+              onClick={() => setShowFilters((v) => !v)}
+              className={buttonClasses('secondary', 'md', 'shrink-0 md:hidden')}
+            >
+              <SlidersHorizontal aria-hidden />
+              Filters
+              {activeCount - (filters.q ? 1 : 0) > 0 && <span className="font-mono text-muted-fg">{activeCount - (filters.q ? 1 : 0)}</span>}
+            </button>
+          </div>
         </div>
-        {select('product', 'Product', products.map((p) => ({ value: p.id, label: p.name })), 'All products')}
-        {select('editor', 'Editor', editors(people).map((p) => ({ value: p.id, label: p.name })), 'All editors')}
-        {select(
-          'status',
-          'Status',
-          [{ value: 'active', label: 'All active' }, ...WORKFLOW_STATUSES.map((s) => ({ value: s, label: STATUS_META[s].label }))],
-          'Any status',
-        )}
-        {select('manager', 'Responsible manager', managers(people).map((p) => ({ value: p.id, label: p.name })), 'Any manager')}
-        {select(
-          'due',
-          'Deadline',
-          [
-            { value: 'overdue', label: 'Overdue' },
-            { value: '48h', label: 'Due in 48 hours' },
-            { value: 'week', label: 'Due in 7 days' },
-          ],
-          'Any deadline',
-        )}
+        <div id={`${uid}-filters`} className={cx('contents', !showFilters && 'max-md:hidden')}>
+          {select('product', 'Product', products.map((p) => ({ value: p.id, label: p.name })), 'All products')}
+          {select('editor', 'Editor', editors(people).map((p) => ({ value: p.id, label: p.name })), 'All editors')}
+          {select(
+            'status',
+            'Status',
+            [{ value: 'active', label: 'All active' }, ...WORKFLOW_STATUSES.map((s) => ({ value: s, label: STATUS_META[s].label }))],
+            'Any status',
+          )}
+          {select('manager', 'Responsible manager', managers(people).map((p) => ({ value: p.id, label: p.name })), 'Any manager')}
+          {select(
+            'due',
+            'Deadline',
+            [
+              { value: 'overdue', label: 'Overdue' },
+              { value: '48h', label: 'Due in 48 hours' },
+              { value: 'week', label: 'Due in 7 days' },
+            ],
+            'Any deadline',
+          )}
+        </div>
       </form>
       {activeCount > 0 && (
         <div className="mb-4 flex justify-end">

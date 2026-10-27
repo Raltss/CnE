@@ -55,7 +55,7 @@ export function SubmissionTable({ lookup, submissions, caption, person, emptyTex
     const pkg = sub.package
     return pkg ? (
       <span className="flex flex-col">
-        <Link to={`/packages/${pkg.id}`} className="font-semibold text-fg underline-offset-2 hover:text-primary hover:underline">
+        <Link to={`/packages/${pkg.id}`} className="font-medium text-fg decoration-border-strong underline-offset-4 hover:underline">
           {pkg.title}
         </Link>
         <span className="text-xs text-muted-fg tabular-nums">
@@ -89,7 +89,7 @@ export function SubmissionTable({ lookup, submissions, caption, person, emptyTex
           </thead>
           <tbody>
             {submissions.map((sub) => (
-              <tr key={sub.id} className="border-t border-border align-top transition-colors duration-150 hover:bg-surface-2/60">
+              <tr key={sub.id} className="border-t border-border align-top transition-colors duration-120 hover:bg-surface-2/60">
                 <td className="min-w-48 px-4 py-3">{packageCell(sub)}</td>
                 <td className="px-4 py-3 tabular-nums">{formatDateTime(sub.submittedAt)}</td>
                 <td className="px-4 py-3">

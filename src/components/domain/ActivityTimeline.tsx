@@ -51,19 +51,19 @@ const ICONS: Record<ActivityType, LucideIcon> = {
 export function ActivityTimeline({ events, lookup }: { events: ActivityEvent[]; lookup: Lookup }) {
   if (!events.length) return <EmptyState icon={History} title="No activity yet" compact />
   return (
-    <ol className="relative flex flex-col gap-4 before:absolute before:top-2 before:bottom-2 before:left-[15px] before:w-px before:bg-border">
+    <ol className="relative flex flex-col gap-4 before:absolute before:top-3 before:bottom-3 before:left-3.5 before:w-px before:bg-border">
       {events.map((e) => {
         const Icon = ICONS[e.type]
         return (
           <li key={e.id} className="relative flex gap-3">
-            <span className="z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-muted-fg">
-              <Icon aria-hidden className="size-4" />
+            <span className="z-10 flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-2 text-muted-fg ring-4 ring-surface">
+              <Icon aria-hidden className="size-3.5" />
             </span>
-            <div className="min-w-0 pt-1">
-              <p className="text-sm">
-                <span className="font-semibold">{lookup.personName(e.actorId)}</span> · {e.message}
+            <div className="min-w-0 pt-0.5">
+              <p className="text-ui">
+                <span className="font-medium">{lookup.personName(e.actorId)}</span> <span className="text-muted-fg">·</span> {e.message}
               </p>
-              <p className="text-xs text-muted-fg tabular-nums">{formatDateTime(e.at)}</p>
+              <p className="text-sm text-muted-fg">{formatDateTime(e.at)}</p>
             </div>
           </li>
         )

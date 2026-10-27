@@ -175,7 +175,11 @@ export function PackageLifecycleActions({ lookup, pkg }: { lookup: Lookup; pkg: 
               <button
                 type="button"
                 aria-haspopup="dialog"
-                className={buttonClasses(variant, 'md', 'w-full')}
+                className={
+                  variant === 'danger'
+                    ? buttonClasses('ghost', 'sm', 'w-full justify-start text-danger hover:not-disabled:bg-danger-bg')
+                    : buttonClasses(variant, 'sm', 'w-full')
+                }
                 disabled={busy}
                 onClick={() => setPending(action)}
               >

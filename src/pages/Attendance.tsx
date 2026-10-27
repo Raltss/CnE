@@ -102,9 +102,9 @@ function TeamAttendance() {
         ) : open.data!.length ? (
           <ul className="divide-y divide-border">
             {open.data!.map((s) => (
-              <li key={s.id} className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm tabular-nums">
-                <span className="flex items-center gap-2 font-semibold">
-                  <span aria-hidden className="size-2 rounded-full bg-success" />
+              <li key={s.id} className="flex items-center justify-between gap-2 px-5 py-3 text-ui tabular-nums">
+                <span data-seenry-dot="presence" className="flex items-center gap-2.5 font-medium">
+                  <span aria-hidden className="size-2 shrink-0 rounded-full bg-success" />
                   {lookup.personName(s.personId)}
                 </span>
                 <span className="text-muted-fg">

@@ -10,9 +10,9 @@ interface Toast {
 }
 
 const TONE = {
-  success: { icon: CircleCheck, className: 'border-success text-success', label: 'Success' },
-  error: { icon: CircleAlert, className: 'border-danger text-danger', label: 'Error' },
-  info: { icon: Info, className: 'border-info text-info', label: 'Info' },
+  success: { icon: CircleCheck, className: 'text-success', label: 'Success' },
+  error: { icon: CircleAlert, className: 'text-danger', label: 'Error' },
+  info: { icon: Info, className: 'text-info', label: 'Info' },
 } as const
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -37,7 +37,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-4 bottom-20 z-50 flex flex-col items-center gap-2 md:inset-x-auto md:right-6 md:bottom-6 md:items-end"
+        className="pointer-events-none fixed inset-x-4 bottom-24 z-50 flex flex-col items-center gap-2 md:inset-x-auto md:right-6 md:bottom-6 md:items-end"
       >
         {toasts.map((t) => {
           const tone = TONE[t.tone]
@@ -45,20 +45,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           return (
             <div
               key={t.id}
-              className={cx(
-                'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border-l-4 bg-surface p-3 text-sm text-fg shadow-lg ring-1 ring-border',
-                tone.className,
-              )}
+              className="pointer-events-auto flex w-full max-w-sm animate-rise-in items-start gap-3 rounded-xl bg-surface py-3 pr-3 pl-4 text-ui text-fg shadow-xl ring-1 ring-border"
             >
-              <Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
-              <p className="flex-1 text-fg">
+              <Icon aria-hidden className={cx('mt-0.5 size-4 shrink-0', tone.className)} />
+              <p className="flex-1">
                 <span className="sr-only">{tone.label}: </span>
                 {t.message}
               </p>
               <button
                 type="button"
                 onClick={() => dismiss(t.id)}
-                className="-m-1 rounded p-1 text-muted-fg hover:bg-surface-2 hover:text-fg"
+                className="-my-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg transition-colors duration-120 hover:bg-surface-2 hover:text-fg"
                 aria-label="Dismiss notification"
               >
                 <X aria-hidden className="size-4" />

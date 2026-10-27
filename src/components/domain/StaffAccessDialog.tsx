@@ -204,8 +204,8 @@ export function StaffAccessDialog({ accounts, account, me, onClose }: StaffAcces
       )}
       {!confirmDeactivate && history.length > 0 && (
         <div>
-          <p className="mb-1 text-xs font-semibold tracking-wide text-muted-fg uppercase">Recent history</p>
-          <div className="-mx-5 border-y border-border">
+          <p className="mb-1 text-sm font-medium text-muted-fg">Recent history</p>
+          <div className="-mx-6 border-y border-border">
             <StaffActivityList accounts={accounts} entries={history} label={`${account.name}’s recent account history`} />
           </div>
         </div>

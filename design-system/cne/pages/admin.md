@@ -2,12 +2,13 @@
 
 > Overrides `../MASTER.md` for the admin pages: `/overview`, `/team`, `/team/:id`, `/staff`, and the admin view of `/packages`, `/packages/:id`, and `/attendance`. Anything not listed here follows Master.
 > Added 2026-10-21 at the user's request: the admin oversees everyone's work read-only and manages staff access.
+> Restyled 2026-10-26 with the Playhead system (MASTER.md): Overview leads with the deadline track instead of figure tiles.
 
 **Density:** 5/10 on Overview (like the manager dashboard), Master's 8/10 on tables (Team, person tabs, Staff).
 
 ## Viewing is not acting
 
-- Every oversight screen starts with the **View only** note (`ViewOnlyBanner`): info tone, eye icon, one or two sentences. On a person's page it names the admin ("You're signed in as yourself…") and the person being viewed.
+- Every oversight screen starts with the **View only** note (`ViewOnlyBanner`): a quiet sunken note with an eye icon, one or two sentences. On a person's page it names the admin ("You're signed in as yourself…") and the person being viewed.
 - No workflow buttons for admins anywhere (Start, Submit, Approve, Apply Feedback, Edit, New package). The package Actions panel shows "View only" with links to the editor's and manager's pages instead.
 - There's no "view as" or account switching. Links go to the person's page, never to their session.
 - Real actions exist only in **Staff & Roles**, behind a dialog that ends with "Recorded in the account history as done by you (<name>)". **Add user** is the page's primary button. Deactivation is a confirm step inside the same dialog (danger button, warning about open packages). Never stack two dialogs.
@@ -17,10 +18,12 @@
 ```
 Overview
 Team overview · date                                     (no primary action)
-[View only]  [N accounts waiting → Staff & Roles]        ← warning callout only when someone waits
-┌ Active ┐┌ Overdue ┐┌ Pending reviews ┐┌ Clocked in now ┐   ← 4 tiles; first three open dialogs, the last links to Attendance
+[View only]  [N accounts waiting → Staff & Roles]        ← warning note only when someone waits
+┌ [Overdue 4][Waiting for review 5][Due in 48h 9][All active 22] ──── Open Packages ┐
+│ deadline track: every active package in the view, one playhead, "Open" per row   │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ┌ Editor workload (rows → /team/:id) ┐┌ Clocked in now (rows → attendance tab) ┐
-│                                    │└ Managers: reviews waiting, responsible ┘
+│                                    │└ Managers: reviews waiting, active, overdue ┘
 └────────────────────────────────────┘
 ```
 

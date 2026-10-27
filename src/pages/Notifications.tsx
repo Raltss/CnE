@@ -32,12 +32,12 @@ export function Notifications() {
       aria-pressed={filter === value}
       onClick={() => setParams(value === 'all' ? {} : { show: value }, { replace: true })}
       className={cx(
-        'min-h-9 rounded-md px-3 text-sm font-semibold transition-colors duration-150',
-        filter === value ? 'bg-primary text-on-primary' : 'text-muted-fg hover:bg-surface-2 hover:text-fg',
+        'min-h-9 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-[background-color,color,box-shadow] duration-180 ease-out',
+        filter === value ? 'bg-surface text-fg shadow-xs ring-1 ring-border' : 'text-muted-fg hover:text-fg',
       )}
     >
       {label}
-      {count !== undefined && <span className="tabular-nums"> ({count})</span>}
+      {count !== undefined && <span className="ml-1.5 font-mono text-muted-fg">{count}</span>}
     </button>
   )
 
@@ -57,7 +57,7 @@ export function Notifications() {
         title={unread ? `${unread} unread` : 'All caught up'}
         flush
         actions={
-          <div className="flex gap-1" role="group" aria-label="Show notifications">
+          <div className="flex gap-1 rounded-lg bg-surface-2 p-1" role="group" aria-label="Show notifications">
             {tab('all', 'All', filter === 'all' && !list.isPending ? total : undefined)}
             {tab('unread', 'Unread', unread)}
           </div>

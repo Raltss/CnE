@@ -1,6 +1,6 @@
 import { CalendarCheck, CalendarClock, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { useSearchParams } from 'react-router'
-import { PackageList } from '../../components/domain/PackageList'
+import { DeadlineTrack } from '../../components/domain/DeadlineTrack'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageStatus } from '../../components/ui/PageStatus'
 import { PageHeader, Section } from '../../components/ui/Section'
@@ -8,7 +8,7 @@ import { useNow } from '../../data/hooks'
 import { pageStatus, useActiveWork, useDirectory } from '../../data/queries'
 import { byDeadline, isActive, isDueWithin, isOverdue, type Lookup } from '../../data/selectors'
 import type { PackageSummary } from '../../data/types'
-import { cx } from '../../lib/styles'
+import { cardClasses, cx } from '../../lib/styles'
 import { DAY_MS, HOUR_MS } from '../../lib/time'
 import { useSession } from '../../session/context'
 
@@ -41,8 +41,8 @@ export function Deadlines() {
       aria-pressed={scope === value}
       onClick={() => setParams(value === 'all' ? {} : { scope: value }, { replace: true })}
       className={cx(
-        'min-h-10 rounded-md px-4 text-sm font-semibold transition-colors duration-150',
-        scope === value ? 'bg-primary text-on-primary' : 'text-muted-fg hover:bg-surface-2 hover:text-fg',
+        'min-h-9 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-[background-color,color,box-shadow] duration-180 ease-out',
+        scope === value ? 'bg-surface text-fg shadow-xs ring-1 ring-border' : 'text-muted-fg hover:text-fg',
       )}
     >
       {label}
@@ -53,9 +53,9 @@ export function Deadlines() {
     <>
       <PageHeader
         title="Deadlines"
-        description="Active packages that are overdue or due in the next 7 days, soonest first. Times are in Manila (PHT)."
+        description="Active packages that are overdue or due in the next 7 days, soonest first, in Manila time."
         actions={
-          <div className="flex gap-1 rounded-lg border border-border bg-surface p-1" role="group" aria-label="Whose packages">
+          <div className="flex gap-1 rounded-lg bg-surface-2 p-1" role="group" aria-label="Whose packages">
             {tab('all', 'All packages')}
             {tab('mine', 'I’m responsible')}
           </div>
@@ -118,28 +118,24 @@ interface GroupProps {
 
 function Group({ title, icon: Icon, tone, description, packages, empty, lookup, now }: GroupProps) {
   const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  const late = tone === 'danger' && packages.length > 0
   return (
-    <section aria-labelledby={`dl-${id}`} className="rounded-lg border border-border bg-surface">
-      <header className="flex items-center gap-3 border-b border-border px-5 py-4">
-        <span
-          className={cx(
-            'flex size-9 shrink-0 items-center justify-center rounded-md',
-            tone === 'danger' && packages.length ? 'bg-danger-bg text-danger' : tone === 'warning' && packages.length ? 'bg-warning-bg text-warning' : 'bg-surface-2 text-muted-fg',
-          )}
-        >
-          <Icon aria-hidden className="size-4" />
-        </span>
+    <section aria-labelledby={`dl-${id}`} className={cx(cardClasses, 'overflow-hidden')}>
+      <header className="flex items-start gap-3 px-5 pt-4 pb-3">
+        <Icon aria-hidden className={cx('mt-0.5 size-4.5 shrink-0', late ? 'text-now' : 'text-muted-fg')} />
         <div>
           <h2 id={`dl-${id}`} className="text-base font-semibold">
-            {title} <span className="text-muted-fg tabular-nums">({packages.length})</span>
+            {title} <span className={cx('ml-1 tabular-nums', late ? 'text-now' : 'text-muted-fg')}>{packages.length}</span>
           </h2>
           <p className="text-sm text-muted-fg">{description}</p>
         </div>
       </header>
       {packages.length ? (
-        <PackageList lookup={lookup} packages={packages} now={now} label={title} />
+        <div className="border-t border-border">
+          <DeadlineTrack packages={packages} now={now} lookup={lookup} label={title} />
+        </div>
       ) : (
-        <p className="px-5 py-4 text-sm text-muted-fg">{empty}</p>
+        <p className="px-5 pb-4 pl-12 text-sm text-muted-fg">{empty}</p>
       )}
     </section>
   )

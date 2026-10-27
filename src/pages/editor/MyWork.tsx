@@ -1,19 +1,26 @@
-import { CalendarClock, CircleCheck, ListTodo, RotateCcw, TriangleAlert } from 'lucide-react'
+import { CircleCheck, ListTodo } from 'lucide-react'
 import { Link } from 'react-router'
 import { AttendanceTable } from '../../components/domain/AttendanceTable'
 import { ClockCard } from '../../components/domain/ClockControls'
+import { DueCountdown } from '../../components/domain/DeadlineBadge'
+import { DeadlineTrack } from '../../components/domain/DeadlineTrack'
 import { EditorPackageAction } from '../../components/domain/EditorPackageAction'
-import { FeedbackCard } from '../../components/domain/FeedbackCard'
-import { KpiStat, KpiStrip } from '../../components/domain/KpiStat'
+import { FeedbackNote } from '../../components/domain/FeedbackCard'
 import { PackageTable } from '../../components/domain/PackageTable'
+import { StatusBadge } from '../../components/domain/StatusBadge'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageStatus } from '../../components/ui/PageStatus'
 import { PageHeader, Section } from '../../components/ui/Section'
 import { useNow } from '../../data/hooks'
 import { pageStatus, pagedRows, pagedTotal, useActiveWork, useDirectory, useFinishedPackages, usePersonAttendance } from '../../data/queries'
-import { isActive, isDueWithin, isOverdue, withinDays } from '../../data/selectors'
-import { DAY_MS } from '../../lib/time'
+import { byDeadline, isActive, isOverdue, withinDays, type Lookup } from '../../data/selectors'
+import type { PackageSummary } from '../../data/types'
+import { cardClasses, cx, linkClasses } from '../../lib/styles'
+import { formatDate, formatDueInline } from '../../lib/time'
 import { useSession } from '../../session/context'
+
+/** Changes requested come first, then work already started, then work not started; soonest deadline first in each. */
+const URGENCY: Partial<Record<PackageSummary['status'], number>> = { apply_feedback: 0, in_progress: 1, assigned: 2 }
 
 export function MyWork() {
   const now = useNow()
@@ -24,7 +31,7 @@ export function MyWork() {
   const attendance = usePersonAttendance(me.id)
   const { lookup, queries } = useDirectory()
   // The header needs no data, so it shows right away; the rest waits for its queries.
-  const header = <PageHeader title={`Hi, ${me.name.split(' ')[0]}`} description="Your assigned packages, deadlines, and submissions." />
+  const header = <PageHeader title="My work" description={`${formatDate(now.toISOString())} · Your packages, deadlines and submissions`} />
   const status = pageStatus(work, finished, attendance, ...queries)
   if (status.pending || status.error)
     return (
@@ -34,105 +41,144 @@ export function MyWork() {
       </>
     )
 
-  const active = work.data!.filter((p) => p.editorId === me.id && isActive(p))
-  const changes = active.filter((p) => p.status === 'apply_feedback')
-  const others = active.filter((p) => p.status !== 'apply_feedback')
+  const mine = work.data!.filter((p) => p.editorId === me.id)
+  const active = mine.filter(isActive)
+  const late = active.filter((p) => isOverdue(p, now)).length
   // With the client or paused by a manager: not active work (no overdue, no submitting) but still theirs.
-  const waiting = work.data!.filter((p) => p.editorId === me.id && (p.status === 'client_review' || p.status === 'on_hold'))
+  const current = [...mine].sort(byDeadline)
+  const next = [...active]
+    .filter((p) => p.status in URGENCY)
+    .sort((a, b) => URGENCY[a.status]! - URGENCY[b.status]! || byDeadline(a, b))[0]
   const recent = pagedRows(finished.data).slice(0, 5)
   const weekSessions = attendance.data!.filter((s) => withinDays(s.clockIn, 7, now))
 
   return (
     <>
       {header}
-      <KpiStrip>
-        <KpiStat label="Active packages" value={active.length} icon={ListTodo} />
-        <KpiStat label="Needs changes" value={changes.length} icon={RotateCcw} to="/needs-changes" tone="attention" />
-        <KpiStat label="Due in 7 days" value={active.filter((p) => isDueWithin(p, now, 7 * DAY_MS)).length} icon={CalendarClock} />
-        <KpiStat label="Overdue" value={active.filter((p) => isOverdue(p, now)).length} icon={TriangleAlert} tone="danger" />
-        <KpiStat label="Finished" value={pagedTotal(finished.data)} icon={CircleCheck} to="/history" />
-      </KpiStrip>
 
-      <div className="grid gap-5 xl:grid-cols-3">
-        <div className="flex min-w-0 flex-col gap-5 xl:col-span-2">
-          {changes.length > 0 && (
-            <section aria-labelledby="needs-changes-heading" className="flex flex-col gap-3">
-              <h2 id="needs-changes-heading" className="flex items-center gap-2 text-base font-semibold">
-                <RotateCcw aria-hidden className="size-4 text-st-feedback" />
-                Needs changes ({changes.length})
-              </h2>
-              {changes.map((pkg) => (
-                <FeedbackCard key={pkg.id} lookup={lookup} pkg={pkg} now={now} />
-              ))}
-            </section>
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="min-w-0 xl:col-span-2">{next ? <NextUp pkg={next} now={now} lookup={lookup} /> : <AllClear waiting={current.length} />}</div>
+        <ClockCard />
+      </div>
+
+      <Section
+        title="Current work"
+        description={`${active.length} active${late ? ` · ${late} overdue` : ''}${current.length > active.length ? ` · ${current.length - active.length} with the client or on hold` : ''}`}
+        className="mt-6"
+        flush
+      >
+        {current.length ? (
+          <div className="border-t border-border">
+            <DeadlineTrack
+              packages={current}
+              now={now}
+              lookup={lookup}
+              label="Current work"
+              meta={(pkg) => (
+                <>
+                  <span className="font-mono">{pkg.code}</span>
+                  {pkg.latest && (
+                    <>
+                      {' · '}
+                      <span className="font-mono">R{pkg.latest.round}</span>
+                    </>
+                  )}
+                  {' · '}
+                  {lookup.productName(pkg.productId)}
+                </>
+              )}
+              action={(pkg) => <EditorPackageAction pkg={pkg} />}
+            />
+          </div>
+        ) : (
+          <EmptyState icon={ListTodo} title="No packages assigned" compact>
+            New assignments appear here, and you’ll get a notification.
+          </EmptyState>
+        )}
+      </Section>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-2 xl:items-stretch">
+        <Section
+          title="Recently finished"
+          description={`${pagedTotal(finished.data)} finished in all`}
+          flush
+          actions={
+            <Link to="/history" className={cx(linkClasses, 'text-sm')}>
+              View history
+            </Link>
+          }
+        >
+          {recent.length ? (
+            <PackageTable lookup={lookup} packages={recent} now={now} caption="Recently finished" columns={['package', 'product', 'status', 'round']} />
+          ) : (
+            <EmptyState icon={CircleCheck} title="No finished work yet" compact>
+              Packages you deliver show up here.
+            </EmptyState>
           )}
-
-          <Section title="My packages" description="Sorted by deadline" flush>
-            {others.length ? (
-              <PackageTable
-                lookup={lookup}
-                packages={others}
-                now={now}
-                caption="My packages"
-                columns={['package', 'product', 'status', 'deadline', 'round']}
-                action={(pkg) => <EditorPackageAction pkg={pkg} />}
-              />
-            ) : (
-              <EmptyState icon={ListTodo} title={changes.length ? 'No other active packages' : 'No packages assigned'} compact>
-                New assignments will appear here, and you’ll get a notification.
-              </EmptyState>
-            )}
-          </Section>
-
-          {waiting.length > 0 && (
-            <Section
-              title={`Waiting on others (${waiting.length})`}
-              description="With the client, or paused by a manager. You’ll be notified when they move."
-              flush
-            >
-              <PackageTable
-                lookup={lookup}
-                packages={waiting}
-                now={now}
-                caption="Waiting on others"
-                columns={['package', 'product', 'status', 'deadline']}
-                action={(pkg) => <EditorPackageAction pkg={pkg} />}
-              />
-            </Section>
-          )}
-
-          <Section
-            title="Recently finished"
-            flush
-            actions={
-              <Link to="/history" className="text-sm font-semibold text-primary hover:underline">
-                View history
-              </Link>
-            }
-          >
-            {recent.length ? (
-              <PackageTable lookup={lookup} packages={recent} now={now} caption="Recently finished" columns={['package', 'product', 'status', 'round']} />
-            ) : (
-              <EmptyState icon={CircleCheck} title="No finished work yet" compact />
-            )}
-          </Section>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-5">
-          <ClockCard />
-          <Section
-            title="My attendance this week"
-            flush
-            actions={
-              <Link to="/attendance" className="text-sm font-semibold text-primary hover:underline">
-                Full history
-              </Link>
-            }
-          >
-            <AttendanceTable sessions={weekSessions.slice(0, 7)} now={now} caption="My attendance this week" />
-          </Section>
-        </div>
+        </Section>
+        <Section
+          title="This week’s attendance"
+          description={`${weekSessions.length} ${weekSessions.length === 1 ? 'session' : 'sessions'} in the last 7 days`}
+          flush
+          actions={
+            <Link to="/attendance" className={cx(linkClasses, 'text-sm')}>
+              Full history
+            </Link>
+          }
+        >
+          <AttendanceTable sessions={weekSessions.slice(0, 7)} now={now} caption="My attendance this week" />
+        </Section>
       </div>
     </>
+  )
+}
+
+/** The one cut to work on now: its note, its deadline and its next step. */
+function NextUp({ pkg, now, lookup }: { pkg: PackageSummary; now: Date; lookup: Lookup }) {
+  return (
+    <section aria-labelledby="next-up" data-seenry-hero-visual className={cx(cardClasses, 'flex h-full flex-col gap-5 p-5')}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 id="next-up" className="text-sm font-medium text-muted-fg">
+            Next up
+          </h2>
+          <p className="mt-1 text-2xl font-semibold tracking-tight">
+            <Link to={`/packages/${pkg.id}`} className="decoration-border-strong underline-offset-4 hover:underline">
+              {pkg.title}
+            </Link>
+          </p>
+          <p className="mt-1 text-ui text-muted-fg">
+            <span className="font-mono whitespace-nowrap">{pkg.code}</span>
+            {pkg.latest && (
+              <>
+                {' · '}
+                <span className="font-mono">R{pkg.latest.round}</span>
+              </>
+            )}
+            {' · '}
+            {lookup.productName(pkg.productId)}
+          </p>
+        </div>
+        <StatusBadge status={pkg.status} />
+      </div>
+      {pkg.status === 'apply_feedback' && <FeedbackNote lookup={lookup} pkg={pkg} />}
+      <div className="mt-auto flex flex-wrap items-end justify-between gap-4 border-t border-border pt-4">
+        <div>
+          <p className="text-ui">Due {formatDueInline(pkg.deadline, now)}</p>
+          <DueCountdown pkg={pkg} now={now} />
+        </div>
+        <EditorPackageAction pkg={pkg} size="md" emphasis />
+      </div>
+    </section>
+  )
+}
+
+function AllClear({ waiting }: { waiting: number }) {
+  return (
+    <section className={cx(cardClasses, 'flex h-full items-center')}>
+      <EmptyState icon={CircleCheck} title="You’re all caught up">
+        {waiting ? 'Everything of yours is with the client or on hold. You’ll be notified when it moves.' : 'Nothing is assigned to you right now. New work arrives with a notification.'}
+      </EmptyState>
+    </section>
   )
 }

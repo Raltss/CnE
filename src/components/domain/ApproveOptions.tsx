@@ -31,7 +31,7 @@ export function ApproveOptions({ latest, value, onChange }: { latest: RoundSumma
           <label
             key={mode}
             className={cx(
-              'flex gap-3 rounded-lg border p-3 transition-colors duration-150',
+              'flex gap-3 rounded-lg border p-3 transition-colors duration-120',
               disabled ? 'cursor-not-allowed border-border opacity-70' : 'cursor-pointer border-border-strong hover:bg-surface-2',
               'has-checked:border-primary has-checked:bg-primary/5',
               'has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring',

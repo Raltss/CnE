@@ -99,13 +99,13 @@ export function Staff() {
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-center gap-2">
                       {a.role && a.role !== 'admin' ? (
-                        <Link to={`/team/${a.id}`} className="font-semibold hover:text-primary hover:underline">
+                        <Link to={`/team/${a.id}`} className="font-medium text-fg decoration-border-strong underline-offset-4 hover:underline">
                           {a.name}
                         </Link>
                       ) : (
                         <span className="font-semibold">{a.name}</span>
                       )}
-                      {a.id === me.id && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">You</span>}
+                      {a.id === me.id && <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-fg">You</span>}
                     </p>
                     <p className="truncate text-sm text-muted-fg">
                       {a.email}

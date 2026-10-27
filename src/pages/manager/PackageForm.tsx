@@ -165,7 +165,7 @@ function PackageForm({ people, products, pkg }: { people: Person[]; products: Pr
 
   return (
     <>
-      <Link to={back.to} onClick={back.onClick} className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+      <Link to={back.to} onClick={back.onClick} className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-fg underline decoration-border-strong underline-offset-4 transition-colors duration-120 hover:decoration-fg">
         <ArrowLeft aria-hidden className="size-4" />
         Back to {back.label.toLowerCase()}
       </Link>

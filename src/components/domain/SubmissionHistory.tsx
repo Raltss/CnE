@@ -37,21 +37,24 @@ export function SubmissionHistory({ rounds: subs, lookup }: { rounds: Submission
     )
 
   return (
-    <ol className="flex flex-col gap-3">
+    <ol className="divide-y divide-border border-t border-border">
       {subs.map((sub) => {
         const outcome = OUTCOME_META[sub.outcome]
         const OutcomeIcon = outcome.icon
         const reused = sameLinksAs(sub, subs)
         return (
-          <li key={sub.id} className="rounded-lg border border-border p-3">
+          <li key={sub.id} className="px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-semibold">Round {sub.round}</h3>
-              <span className={cx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold', outcome.className)}>
+              <h3 className="flex items-baseline gap-2 text-ui font-semibold">
+                <span className="font-mono">R{sub.round}</span>
+                <span className="sr-only">Round {sub.round}</span>
+              </h3>
+              <span className={cx('inline-flex h-6 items-center gap-1.5 rounded-full pr-2.5 pl-2 text-sm font-medium', outcome.className)}>
                 <OutcomeIcon aria-hidden className="size-3.5" />
                 {outcome.label}
               </span>
             </div>
-            <p className="text-xs text-muted-fg tabular-nums">
+            <p className="mt-0.5 text-sm text-muted-fg">
               Submitted {formatDateTime(sub.submittedAt)} by {lookup.personName(sub.submittedById)}
               {reused && ` · Same links as Round ${reused}`}
             </p>
@@ -60,12 +63,12 @@ export function SubmissionHistory({ rounds: subs, lookup }: { rounds: Submission
               <LinkField label="Delivery link" icon={Truck} url={sub.deliveryLink} />
             </div>
             {decisions(sub, lookup).map((line) => (
-              <p key={line} className="mt-1 text-xs text-muted-fg tabular-nums">
+              <p key={line} className="mt-1 text-sm text-muted-fg">
                 {line}
               </p>
             ))}
             {sub.feedbackNote && (
-              <blockquote className="mt-2 border-l-2 border-st-feedback pl-3 text-sm">
+              <blockquote className="mt-3 rounded-lg bg-surface-2 px-4 py-3 text-ui">
                 <span className="sr-only">{sub.outcome === 'client_feedback' ? 'Client’s request: ' : 'Manager note: '}</span>
                 {sub.feedbackNote}
               </blockquote>

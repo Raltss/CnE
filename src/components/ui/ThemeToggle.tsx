@@ -2,8 +2,8 @@ import { Monitor, Moon, Sun } from 'lucide-react'
 import { cx } from '../../lib/styles'
 import { setTheme, useTheme, type ThemeChoice } from '../../lib/theme'
 
-/** One-tap switch between light and dark, for the top bar and the sign-in screens. */
-export function ThemeToggle({ className }: { className?: string }) {
+/** One-tap switch between light and dark, for the top bar (`tone="chrome"`) and the sign-in screens. */
+export function ThemeToggle({ className, tone = 'surface' }: { className?: string; tone?: 'surface' | 'chrome' }) {
   const { theme } = useTheme()
   const next = theme === 'dark' ? 'light' : 'dark'
   const Icon = theme === 'dark' ? Sun : Moon
@@ -14,11 +14,12 @@ export function ThemeToggle({ className }: { className?: string }) {
       aria-label={`Switch to ${next} theme`}
       title={`Switch to ${next} theme`}
       className={cx(
-        'flex size-10 items-center justify-center rounded-full text-muted-fg transition-colors duration-150 hover:bg-surface-2 hover:text-fg',
+        'flex size-10 items-center justify-center rounded-md transition-colors duration-120',
+        tone === 'chrome' ? 'text-chrome-fg hover:bg-chrome-2 hover:text-chrome-strong' : 'text-muted-fg hover:bg-surface-2 hover:text-fg',
         className,
       )}
     >
-      <Icon aria-hidden className="size-5" />
+      <Icon aria-hidden className="size-4.5" />
     </button>
   )
 }
@@ -29,19 +30,19 @@ const CHOICES: Array<{ value: ThemeChoice; label: string; icon: typeof Sun }> = 
   { value: 'system', label: 'Match device', icon: Monitor },
 ]
 
-/** Light, dark, or follow the device setting (Account page). */
+/** Light, dark, or follow the device setting (Account page): a segmented control. */
 export function ThemePicker() {
   const { choice } = useTheme()
   return (
     <fieldset>
       <legend className="mb-2 text-sm font-medium">Theme</legend>
-      <div className="grid grid-cols-3 gap-1 rounded-md border border-border-strong bg-surface-2 p-1">
+      <div className="grid grid-cols-3 gap-1 rounded-lg bg-surface-2 p-1">
         {CHOICES.map(({ value, label, icon: Icon }) => (
           <label
             key={value}
             className={cx(
-              'flex min-h-11 cursor-pointer flex-col items-center justify-center gap-0.5 rounded px-2 py-1.5 text-center text-xs font-medium text-muted-fg transition-colors duration-150 hover:text-fg sm:flex-row sm:gap-2 sm:text-sm',
-              'has-checked:bg-surface has-checked:font-semibold has-checked:text-primary',
+              'flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-md px-2 text-center text-sm font-medium text-muted-fg transition-[background-color,color,box-shadow] duration-180 hover:text-fg',
+              'has-checked:bg-surface has-checked:text-fg has-checked:shadow-sm has-checked:ring-1 has-checked:ring-border',
               'has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring',
             )}
           >
@@ -58,7 +59,7 @@ export function ThemePicker() {
           </label>
         ))}
       </div>
-      <p className="mt-2 text-xs text-muted-fg">Saved on this device only.</p>
+      <p className="mt-2 text-sm text-muted-fg">Saved on this device only.</p>
     </fieldset>
   )
 }

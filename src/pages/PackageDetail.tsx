@@ -29,6 +29,7 @@ import { DeadlineBadge } from '../components/domain/DeadlineBadge'
 import { ViewOnlyBanner } from '../components/domain/ViewOnlyBanner'
 import { LinkField } from '../components/domain/LinkField'
 import { PackageLifecycleActions } from '../components/domain/PackageLifecycleActions'
+import { RoundsTrack } from '../components/domain/RoundsTrack'
 import { OverdueBadge, StatusBadge } from '../components/domain/StatusBadge'
 import { SubmissionForm } from '../components/domain/SubmissionForm'
 import { SubmissionHistory } from '../components/domain/SubmissionHistory'
@@ -89,7 +90,7 @@ export function PackageDetail() {
 
   return (
     <>
-      <Link to={back.to} onClick={back.onClick} className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+      <Link to={back.to} onClick={back.onClick} className="mb-2 inline-flex min-h-9 items-center gap-1.5 text-sm font-medium text-muted-fg transition-colors duration-120 hover:text-fg md:mb-4">
         <ArrowLeft aria-hidden className="size-4" />
         {back.label}
       </Link>
@@ -101,115 +102,121 @@ export function PackageDetail() {
         </ViewOnlyBanner>
       )}
 
-      <header className={cx(cardClasses, 'mb-5 p-4')}>
-        <nav aria-label="Breadcrumb" className="text-xs text-muted-fg">
-          <ol className="flex flex-wrap items-center gap-1">
+      <header className="mb-6">
+        <nav aria-label="Breadcrumb" className="text-ui text-muted-fg">
+          <ol className="flex flex-wrap items-center gap-1.5">
             <li>{lookup.productName(pkg.productId)}</li>
             <li aria-hidden>
-              <ChevronRight className="size-3" />
+              <ChevronRight className="size-3.5" />
             </li>
-            <li aria-current="page" className="tabular-nums">
+            <li aria-current="page" className="font-mono text-fg">
               {pkg.code}
             </li>
           </ol>
         </nav>
-        <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{pkg.title}</h1>
+        <div className="mt-1.5 flex flex-wrap items-start justify-between gap-4">
+          <h1 className="min-w-0 text-3xl font-semibold">{pkg.title}</h1>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={pkg.status} />
             {isOverdue(pkg, now) && <OverdueBadge />}
             {me.role === 'manager' && pkg.status !== 'archived' && (
-              <Link to={`/packages/${pkg.id}/edit`} state={backState(location, 'Package')} className={buttonClasses('secondary', 'sm')}>
-                <Pencil aria-hidden className="size-4" />
+              <Link to={`/packages/${pkg.id}/edit`} state={backState(location, 'Package')} className={buttonClasses('secondary', 'sm', 'ml-1')}>
+                <Pencil aria-hidden />
                 Edit
               </Link>
             )}
           </div>
         </div>
-        <dl className="mt-4 grid grid-cols-2 gap-4 text-sm lg:grid-cols-5">
-          <div>
-            <dt className="text-xs font-semibold text-muted-fg">Editor</dt>
-            <dd>{lookup.personName(pkg.editorId)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold text-muted-fg">Responsible manager</dt>
-            <dd>{lookup.personName(pkg.responsibleManagerId)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold text-muted-fg">Final deadline</dt>
-            <dd>
-              <DeadlineBadge pkg={pkg} now={now} />
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold text-muted-fg">Submission rounds</dt>
-            <dd className="tabular-nums">{rounds || 'None yet'}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold text-muted-fg">Client revisions</dt>
-            <dd className={cx('flex items-center gap-1 tabular-nums', revisions.extra > 0 && 'font-semibold text-warning')}>
-              {revisions.extra > 0 && <TriangleAlert aria-hidden className="size-4 shrink-0" />}
-              {revisions.used === 0 && revisions.included === null ? 'None yet' : revisionSummary(revisions.used, revisions.included)}
-            </dd>
-          </div>
-        </dl>
       </header>
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <div className="flex min-w-0 flex-col gap-5 lg:order-2">
-          <Section title="Actions">
+      {/* Why it's in this state comes first: feedback, hold, cancel, reopen. */}
+      <div className="mb-6 flex flex-col gap-4 empty:hidden">
+        <LifecycleCallout pkg={pkg} activity={activity} lookup={lookup} />
+        {pkg.status === 'apply_feedback' && latest?.outcome === 'feedback' && (
+          <Callout tone="warning" title={`Feedback requested on Round ${latest.round}`}>
+            {latest.feedbackNote ? (
+              <>
+                <span className="font-medium text-fg">{lookup.personName(latest.decidedById ?? '')}:</span> “{latest.feedbackNote}”
+              </>
+            ) : (
+              'No note added.'
+            )}{' '}
+            Detailed comments are in Frame.io.
+          </Callout>
+        )}
+        {pkg.status === 'apply_feedback' && latest?.outcome === 'client_feedback' && (
+          <Callout tone="warning" title={`The client asked for changes on Round ${latest.round}`}>
+            {latest.feedbackNote ? `“${latest.feedbackNote}”` : 'No note added.'}{' '}
+            <span className="whitespace-nowrap">(Recorded by {lookup.personName(latest.clientDecidedById ?? '')})</span>
+          </Callout>
+        )}
+      </div>
+
+      {/* The slate: who, when, which round, in one ruled strip (rows on phones). */}
+      <section aria-label="Package facts" className={cx(cardClasses, 'mb-6 overflow-hidden')}>
+        <dl className="grid gap-px bg-border lg:grid-cols-5">
+          <SlateCell label="Editor">{lookup.personName(pkg.editorId)}</SlateCell>
+          <SlateCell label="Responsible manager">{lookup.personName(pkg.responsibleManagerId)}</SlateCell>
+          <SlateCell label="Final deadline">
+            <DeadlineBadge pkg={pkg} now={now} />
+          </SlateCell>
+          <SlateCell label="Round">
+            {rounds ? (
+              <span className="font-mono">
+                R{rounds}
+                <span className="font-sans text-sm text-muted-fg"> of {rounds}</span>
+              </span>
+            ) : (
+              <span className="text-muted-fg">None yet</span>
+            )}
+          </SlateCell>
+          <SlateCell label="Client revisions">
+            <span className={cx('flex items-center gap-1.5', revisions.extra > 0 && 'font-medium text-warning')}>
+              {revisions.extra > 0 && <TriangleAlert aria-hidden className="size-4 shrink-0" />}
+              {revisions.used === 0 && revisions.included === null ? <span className="text-muted-fg">None yet</span> : revisionSummary(revisions.used, revisions.included)}
+            </span>
+          </SlateCell>
+        </dl>
+        <div data-seenry-hero-visual className="border-t border-border bg-surface px-5 pt-2 pb-1 sm:px-8">
+          <RoundsTrack pkg={pkg} rounds={roundList} now={now} />
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+        <div className="flex min-w-0 flex-col gap-6 lg:sticky lg:top-20 lg:order-2">
+          <Section title={me.role === 'admin' ? 'Actions' : 'Next step'}>
             <ActionPanel lookup={lookup} pkg={pkg} me={me} rounds={roundList} product={product} />
           </Section>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-5 lg:order-1 lg:col-span-2">
-          <LifecycleCallout pkg={pkg} activity={activity} lookup={lookup} />
-          {pkg.status === 'apply_feedback' && latest?.outcome === 'feedback' && (
-            <Callout tone="warning" title={`Feedback requested on Round ${latest.round}`}>
-              {latest.feedbackNote ? (
-                <>
-                  <span className="font-semibold">{lookup.personName(latest.decidedById ?? '')}:</span> “{latest.feedbackNote}”
-                </>
-              ) : (
-                'No note added.'
-              )}{' '}
-              Detailed comments are in Frame.io.
-            </Callout>
-          )}
-          {pkg.status === 'apply_feedback' && latest?.outcome === 'client_feedback' && (
-            <Callout tone="warning" title={`The client asked for changes on Round ${latest.round}`}>
-              {latest.feedbackNote ? `“${latest.feedbackNote}”` : 'No note added.'}{' '}
-              <span className="whitespace-nowrap">(Recorded by {lookup.personName(latest.clientDecidedById ?? '')})</span>
-            </Callout>
-          )}
-
+        <div className="flex min-w-0 flex-col gap-6 lg:order-1 lg:col-span-2">
           <Section title="Brief & references">
-            <div className="divide-y divide-border">
-              <LinkField label="Brief link" icon={FileText} url={pkg.briefLink || null} />
+            <div className="-my-1 divide-y divide-border">
+              <LinkField label="Brief" icon={FileText} url={pkg.briefLink || null} />
               {pkg.referenceLinks.length ? (
                 pkg.referenceLinks.map((url, i) => (
-                  <LinkField key={`${url}-${i}`} label={`Reference link ${i + 1}`} icon={Link2} url={url} />
+                  <LinkField key={`${url}-${i}`} label={`Reference ${i + 1}`} icon={Link2} url={url} />
                 ))
               ) : (
-                <LinkField label="Reference links" icon={Link2} url={null} emptyText="No reference links" />
+                <LinkField label="References" icon={Link2} url={null} emptyText="No reference links" />
               )}
             </div>
           </Section>
 
           <Section title="Deliverables & notes">
-            <dl className="flex flex-col gap-3 text-sm">
+            <dl className="grid gap-5 text-ui sm:grid-cols-2">
               <div>
-                <dt className="text-xs font-semibold tracking-wide text-muted-fg uppercase">Deliverables</dt>
-                <dd className="mt-0.5 whitespace-pre-line">{pkg.deliverables || <span className="text-muted-fg italic">Not specified</span>}</dd>
+                <dt className="text-sm text-muted-fg">Deliverables</dt>
+                <dd className="mt-1 whitespace-pre-line">{pkg.deliverables || <span className="text-muted-fg">Not specified</span>}</dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold tracking-wide text-muted-fg uppercase">Description / notes</dt>
-                <dd className="mt-0.5 whitespace-pre-line">{pkg.description || <span className="text-muted-fg italic">No notes</span>}</dd>
+                <dt className="text-sm text-muted-fg">Description and notes</dt>
+                <dd className="mt-1 whitespace-pre-line">{pkg.description || <span className="text-muted-fg">No notes</span>}</dd>
               </div>
             </dl>
           </Section>
 
-          <Section title="Submission history" description="Every round is kept, newest first">
+          <Section title="Submission history" description="Every round is kept, newest first" flush>
             <SubmissionHistory rounds={roundList} lookup={lookup} />
           </Section>
 
@@ -219,6 +226,15 @@ export function PackageDetail() {
         </div>
       </div>
     </>
+  )
+}
+
+function SlateCell({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 items-baseline justify-between gap-4 bg-surface px-4 py-3 lg:block lg:px-5 lg:py-4">
+      <dt className="text-sm text-muted-fg">{label}</dt>
+      <dd className="text-right text-ui lg:mt-1 lg:text-left">{children}</dd>
+    </div>
   )
 }
 
@@ -245,7 +261,7 @@ function ActionPanel({ lookup, pkg, me, rounds, product }: { lookup: Lookup; pkg
               toast.show(r.ok ? 'Work started' : r.error, r.ok ? 'success' : 'error')
             }}
           >
-            <Play aria-hidden className="size-4" />
+            <Play aria-hidden />
             Start work
           </button>
         </div>
@@ -299,11 +315,11 @@ function ActionPanel({ lookup, pkg, me, rounds, product }: { lookup: Lookup; pkg
     return (
       <StatusNote icon={Eye} title="View only">
         Admins can’t start, submit, review, or edit packages.{' '}
-        <Link to={`/team/${pkg.editorId}`} className="font-semibold text-primary underline-offset-2 hover:underline">
+        <Link to={`/team/${pkg.editorId}`} className="font-medium text-fg underline decoration-border-strong underline-offset-4 transition-colors duration-120 hover:decoration-fg">
           See {lookup.personName(pkg.editorId)}’s work
         </Link>{' '}
         or{' '}
-        <Link to={`/team/${pkg.responsibleManagerId}`} className="font-semibold text-primary underline-offset-2 hover:underline">
+        <Link to={`/team/${pkg.responsibleManagerId}`} className="font-medium text-fg underline decoration-border-strong underline-offset-4 transition-colors duration-120 hover:decoration-fg">
           {managerName}’s
         </Link>
         .
@@ -338,7 +354,7 @@ function ActionPanel({ lookup, pkg, me, rounds, product }: { lookup: Lookup; pkg
         </StatusNote>
       )}
       <div className="flex flex-col gap-2 border-t border-border pt-4">
-        <h3 className="text-xs font-semibold tracking-wide text-muted-fg uppercase">Manage package</h3>
+        <h3 className="text-sm font-medium text-muted-fg">Manage package</h3>
         <PackageLifecycleActions lookup={lookup} pkg={pkg} />
       </div>
     </div>
@@ -368,9 +384,9 @@ function LifecycleCallout({ pkg, activity, lookup }: { pkg: WorkPackage; activit
 function StatusNote({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children?: ReactNode }) {
   return (
     <div className="flex gap-3">
-      <Icon aria-hidden className="mt-0.5 size-5 shrink-0 text-muted-fg" />
+      <Icon aria-hidden className="mt-0.5 size-4.5 shrink-0 text-muted-fg" />
       <div>
-        <p className="font-semibold">{title}</p>
+        <p className="font-medium">{title}</p>
         {children && <p className="mt-0.5 text-sm text-muted-fg">{children}</p>}
       </div>
     </div>
@@ -411,17 +427,17 @@ function ReviewActions({ lookup, pkg }: { lookup: Lookup; pkg: WorkPackage }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm">
-        Round {latest?.round} submitted by <span className="font-semibold">{lookup.personName(pkg.editorId)}</span>
-        {latest && <span className="block text-xs text-muted-fg tabular-nums">{formatDateTime(latest.submittedAt)}</span>}
+      <p className="text-ui">
+        <span className="font-mono font-medium">R{latest?.round}</span> submitted by <span className="font-medium">{lookup.personName(pkg.editorId)}</span>
+        {latest && <span className="block text-sm text-muted-fg">{formatDateTime(latest.submittedAt)}</span>}
       </p>
-      <p className="text-xs text-muted-fg">Check the links in Submission history. Detailed comments go in Frame.io.</p>
+      <p className="text-sm text-muted-fg">Check the links in Submission history. Detailed comments go in Frame.io.</p>
       <button type="button" aria-haspopup="dialog" className={buttonClasses('primary', 'md', 'w-full')} disabled={busy} onClick={() => setApproveOpen(true)}>
-        <Check aria-hidden className="size-4" />
-        Approve…
+        <Check aria-hidden />
+        Approve R{latest?.round}…
       </button>
       <button type="button" className={buttonClasses('secondary', 'md', 'w-full')} onClick={() => setFeedbackOpen(true)}>
-        <RotateCcw aria-hidden className="size-4" />
+        <RotateCcw aria-hidden />
         Apply Feedback
       </button>
 
@@ -436,7 +452,7 @@ function ReviewActions({ lookup, pkg }: { lookup: Lookup; pkg: WorkPackage }) {
               Cancel
             </button>
             <button type="button" disabled={busy} className={buttonClasses('primary')} onClick={() => void approve()}>
-              <Check aria-hidden className="size-4" />
+              <Check aria-hidden />
               {busy ? copy.busy : copy.confirm}
             </button>
           </>

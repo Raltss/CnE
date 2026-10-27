@@ -72,13 +72,9 @@ export function NotificationList({ items, personId, emptyText }: { items: AppNot
         const unread = !n.readAt
         const packageId = n.packageId
         return (
-          <li key={n.id} className={cx('flex items-start gap-3 px-4 py-3', unread && 'bg-primary/5')}>
-            <span
-              className={cx(
-                'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full',
-                unread ? 'bg-primary text-on-primary' : 'bg-surface-2 text-muted-fg',
-              )}
-            >
+          <li key={n.id} data-seenry-dot={unread ? 'unread' : undefined} className={cx('relative flex items-start gap-3 py-3.5 pr-4 pl-6', unread && 'bg-surface-2/50')}>
+            {unread && <span aria-hidden className="absolute top-6 left-2.5 size-1.5 rounded-full bg-fg" />}
+            <span className={cx('flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-2', unread ? 'text-fg' : 'text-muted-fg')}>
               <Icon aria-hidden className="size-4" />
             </span>
             <div className="min-w-0 flex-1">
@@ -86,16 +82,16 @@ export function NotificationList({ items, personId, emptyText }: { items: AppNot
                 <button
                   type="button"
                   onClick={() => open(n, packageId)}
-                  className={cx('text-left text-sm underline-offset-2 hover:text-primary hover:underline', unread ? 'font-semibold' : 'text-fg')}
+                  className={cx('text-left text-ui decoration-border-strong underline-offset-4 hover:underline', unread ? 'font-medium text-fg' : 'text-fg')}
                 >
                   {n.message}
                 </button>
               ) : (
                 // The package was deleted: nothing to open.
-                <p className={cx('text-sm', unread ? 'font-semibold' : 'text-fg')}>{n.message}</p>
+                <p className={cx('text-ui', unread ? 'font-medium' : 'text-fg')}>{n.message}</p>
               )}
-              <p className="flex items-center gap-2 text-xs text-muted-fg tabular-nums">
-                {unread && <span className="font-semibold text-primary">Unread</span>}
+              <p className="mt-0.5 flex items-center gap-2 text-sm text-muted-fg">
+                {unread && <span className="font-medium text-fg">Unread</span>}
                 {formatDateTime(n.createdAt)}
               </p>
             </div>
@@ -103,7 +99,7 @@ export function NotificationList({ items, personId, emptyText }: { items: AppNot
               <button
                 type="button"
                 onClick={() => markRead(n)}
-                className="shrink-0 rounded-md px-2 py-1.5 text-xs font-semibold text-primary hover:bg-surface-2"
+                className="shrink-0 rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-fg transition-colors duration-120 hover:bg-surface-2 hover:text-fg"
               >
                 Mark read
               </button>
