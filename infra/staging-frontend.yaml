@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CnE staging frontend (S3 + CloudFront). Practice copy of production.
+
+# How to read this file:
+#   Each block under "Resources" is one thing AWS will build.
+#   Blocks refer to each other with !Ref / !GetAtt / !Sub, so AWS knows the build order.
+
+Resources:
+  # 1. The storage box where the website files live (private).
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketNamePrefix: cne-staging-frontend
+      BucketNamespace: account-regional
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+            BucketKeyEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+
+  # 2. The key that lets CloudFront (and only CloudFront) open the box.
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: cne-staging-oac
+        Description: Lets the staging CloudFront read the staging bucket
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # 3. The safety-headers set (same values as production's cne-security-headers).
+  SecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: cne-staging-security-headers
+        SecurityHeadersConfig:
+          FrameOptions:
+            Override: true
+            FrameOption: SAMEORIGIN
+          ReferrerPolicy:
+            Override: true
+            ReferrerPolicy: strict-origin-when-cross-origin
+          ContentTypeOptions:
+            Override: true
+          StrictTransportSecurity:
+            Override: true
+            IncludeSubdomains: false
+            Preload: false
+            AccessControlMaxAgeSec: 31536000
+        CustomHeadersConfig:
+          Items:
+            - Header: Content-Security-Policy-Report-Only
+              Override: true
+              Value: >-
+                default-src 'self';
+                script-src 'self' 'sha256-9fkePRX/oGNyCNe6DOJitSm3T2866SGuaJayKVkkZNg=' 'unsafe-hashes' 'sha256-C6b/4Iv4ZcrPnfjsnUI/tt1KLtFSZRbC4PywNhjbLfw=';
+                style-src 'self' https://fonts.googleapis.com;
+                style-src-attr 'unsafe-inline';
+                font-src https://fonts.gstatic.com;
+                img-src 'self';
+                connect-src 'self' https://hmvrqkuqyqjtryqpskvg.supabase.co wss://hmvrqkuqyqjtryqpskvg.supabase.co;
+                object-src 'none';
+                base-uri 'self';
+                form-action 'self'
+
+  # 4. The little program that makes refreshing a page inside the app work.
+  RoutingFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: cne-staging-spa-routing
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Sends page URLs to index.html (same code as production)
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+            var request = event.request;
+            var uri = request.uri;
+            var lastPart = uri.substring(uri.lastIndexOf('/') + 1);
+
+            var isPageRequest =
+                request.method === 'GET' || request.method === 'HEAD';
+            var isAsset = uri === '/assets' || uri.indexOf('/assets/') === 0;
+            var hasExtension = lastPart.indexOf('.') !== -1;
+
+            if (isPageRequest && !isAsset && !hasExtension) {
+                request.uri = '/index.html';
+            }
+
+            return request;
+        }
+
+  # 5. CloudFront itself: delivers the website to visitors.
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: CnE staging (practice copy)
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        IPV6Enabled: true
+        PriceClass: PriceClass_All
+        Origins:
+          - Id: staging-s3-origin
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: staging-s3-origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # AWS's ready-made "CachingOptimized" caching rule
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt RoutingFunction.FunctionARN
+
+  # 6. Lets the staging CloudFront (and only it) read files from the box.
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${SiteBucket.Arn}/*'
+            Condition:
+              ArnLike:
+                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+
+Outputs:
+  StagingUrl:
+    Description: The practice site's address
+    Value: !Sub 'https://${Distribution.DomainName}'
+  StagingBucketName:
+    Description: The practice storage box
+    Value: !Ref SiteBucket
+  StagingDistributionId:
+    Description: The practice CloudFront ID
+    Value: !Ref Distribution
